@@ -1,6 +1,7 @@
 """
 Main module for quantum simulation package.
 Entry point for running simulations with different parameters.
+This module also exposes the necessary functions for the web interface.
 """
 
 import os

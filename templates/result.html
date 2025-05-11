@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Simulation Results - {{ result_name }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h4>Simulation Results: {{ result_name }}</h4>
+                <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-light float-end">Back to Simulations</a>
+            </div>
+            <div class="card-body">
+                {% if analysis %}
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Simulation Parameters</div>
+                            <div class="card-body">
+                                <table class="table table-sm">
+                                    <tbody>
+                                        {% for key, value in analysis.parameters.items() %}
+                                        <tr>
+                                            <th>{{ key }}</th>
+                                            <td>{{ value }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Analysis Results</div>
+                            <div class="card-body">
+                                <h5>Basic Analysis</h5>
+                                <table class="table table-sm">
+                                    <tbody>
+                                        {% for key, value in analysis.basic_analysis.items() %}
+                                        <tr>
+                                            <th>{{ key }}</th>
+                                            <td>{{ value }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                                
+                                <h5 class="mt-3">Frequency Crystal Analysis</h5>
+                                <table class="table table-sm">
+                                    <tbody>
+                                        {% for key, value in analysis.frequency_crystal_analysis.items() %}
+                                        <tr>
+                                            <th>{{ key }}</th>
+                                            <td>{{ value }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                                
+                                {% if analysis.linear_comb_analysis.mx_comb_found or analysis.linear_comb_analysis.mz_comb_found %}
+                                <div class="alert alert-success">
+                                    <h5>Frequency Comb Detected!</h5>
+                                    <ul>
+                                        {% if analysis.linear_comb_analysis.mx_comb_found %}
+                                        <li>X component: Omega={{ analysis.linear_comb_analysis.mx_best_omega }}, 
+                                            Teeth={{ analysis.linear_comb_analysis.mx_num_teeth }}</li>
+                                        {% endif %}
+                                        {% if analysis.linear_comb_analysis.mz_comb_found %}
+                                        <li>Z component: Omega={{ analysis.linear_comb_analysis.mz_best_omega }}, 
+                                            Teeth={{ analysis.linear_comb_analysis.mz_num_teeth }}</li>
+                                        {% endif %}
+                                    </ul>
+                                </div>
+                                {% endif %}
+                                
+                                {% if analysis.log_comb_analysis.mx_log_comb_found or analysis.log_comb_analysis.mz_log_comb_found %}
+                                <div class="alert alert-info">
+                                    <h5>Logarithmic Frequency Comb Detected!</h5>
+                                    <ul>
+                                        {% if analysis.log_comb_analysis.mx_log_comb_found %}
+                                        <li>X component: R={{ analysis.log_comb_analysis.mx_best_r }}, 
+                                            Base={{ analysis.log_comb_analysis.mx_base_freq }},
+                                            Teeth={{ analysis.log_comb_analysis.mx_log_num_teeth }}</li>
+                                        {% endif %}
+                                        {% if analysis.log_comb_analysis.mz_log_comb_found %}
+                                        <li>Z component: R={{ analysis.log_comb_analysis.mz_best_r }}, 
+                                            Base={{ analysis.log_comb_analysis.mz_base_freq }},
+                                            Teeth={{ analysis.log_comb_analysis.mz_log_num_teeth }}</li>
+                                        {% endif %}
+                                    </ul>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert alert-warning">Analysis results not found</div>
+                {% endif %}
+                
+                {% if images %}
+                <h4 class="mt-4 mb-3">Generated Figures</h4>
+                <div class="row">
+                    {% for image in images %}
+                    <div class="col-md-6 mb-4">
+                        <div class="card">
+                            <div class="card-header">{{ image.name }}</div>
+                            <div class="card-body text-center">
+                                <img src="data:image/png;base64,{{ image.data }}" class="img-fluid" alt="{{ image.name }}">
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="alert alert-info mt-4">No figures generated for this simulation</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
