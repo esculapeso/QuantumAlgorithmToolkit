@@ -1,148 +1,123 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
+
+{% block title %}Quantum Simulations{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h3>Background Simulations</h3>
-            <a href="{{ url_for('index') }}" class="btn btn-primary">Start New Simulation</a>
+<div class="container mt-4">
+    <h1>Quantum Simulations</h1>
+    
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">Search Simulations</h5>
+                </div>
+                <div class="card-body">
+                    <form method="get" action="{{ url_for('simulations') }}">
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label for="circuit_type">Circuit Type:</label>
+                                <select name="circuit_type" id="circuit_type" class="form-select">
+                                    <option value="">All</option>
+                                    <option value="penrose">Penrose</option>
+                                    <option value="qft_basic">QFT Basic</option>
+                                    <option value="comb_generator">Comb Generator</option>
+                                    <option value="comb_twistor">Comb Twistor</option>
+                                    <option value="graphene_fc">Graphene FC</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="min_qubits">Min Qubits:</label>
+                                <input type="number" name="min_qubits" id="min_qubits" class="form-control" min="1" max="20">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="max_qubits">Max Qubits:</label>
+                                <input type="number" name="max_qubits" id="max_qubits" class="form-control" min="1" max="20">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="time_crystal" id="time_crystal" value="true">
+                                    <label class="form-check-label" for="time_crystal">Time Crystal Detected</label>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="comb_detected" id="comb_detected" value="true">
+                                    <label class="form-check-label" for="comb_detected">Frequency Comb Detected</label>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <button type="submit" class="btn btn-primary">Search</button>
+                                <a href="{{ url_for('simulations') }}" class="btn btn-secondary">Reset</a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
         </div>
-        
-        <div class="card shadow-sm">
-            <div class="card-body">
-                {% if simulations %}
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Circuit</th>
-                                <th>Parameters</th>
-                                <th>Status</th>
-                                <th>Progress</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for sim in simulations %}
-                            <tr data-sim-id="{{ sim.id }}" class="simulation-row">
-                                <td class="text-muted small">{{ sim.id[:8] }}...</td>
-                                <td>{{ sim.params.circuit_type }}</td>
-                                <td>
-                                    <span class="badge bg-secondary">{{ sim.params.qubits }} qubits</span>
-                                    <span class="badge bg-secondary">{{ sim.params.time_points }} points</span>
-                                </td>
-                                <td>
-                                    {% if sim.status == 'starting' %}
-                                    <span class="badge bg-info">Starting</span>
-                                    {% elif sim.status == 'running' %}
-                                    <span class="badge bg-primary">Running</span>
-                                    {% elif sim.status == 'completed' %}
-                                    <span class="badge bg-success">Completed</span>
-                                    {% elif sim.status == 'error' %}
-                                    <span class="badge bg-danger">Failed</span>
-                                    {% endif %}
-                                </td>
-                                <td style="width: 150px;">
-                                    <div class="progress">
-                                        <div class="progress-bar progress-bar-striped {% if sim.status == 'running' %}progress-bar-animated{% endif %}" 
-                                             role="progressbar" 
-                                             style="width: {{ sim.progress }}%;" 
-                                             aria-valuenow="{{ sim.progress }}" 
-                                             aria-valuemin="0" 
-                                             aria-valuemax="100">{{ sim.progress }}%</div>
-                                    </div>
-                                </td>
-                                <td>
-                                    {% if sim.status == 'completed' and sim.result_path %}
-                                    <a href="{{ url_for('view_result', result_name=sim.result_path) }}" 
-                                       class="btn btn-sm btn-outline-primary">View Results</a>
-                                    {% elif sim.status == 'error' and sim.error %}
-                                    <button type="button" class="btn btn-sm btn-outline-danger" 
-                                            data-bs-toggle="popover" 
-                                            data-bs-content="{{ sim.error }}"
-                                            data-bs-placement="left">
-                                        Show Error
-                                    </button>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+    </div>
+
+    <div class="row">
+        <div class="col">
+            <div class="card">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Simulation Results</h5>
+                    <span class="badge bg-info">{{ simulations|length }} results</span>
                 </div>
-                {% else %}
-                <div class="alert alert-info">
-                    <p class="mb-0">No background simulations are currently running or have been completed.</p>
+                <div class="card-body">
+                    {% if simulations %}
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Circuit</th>
+                                        <th>Qubits</th>
+                                        <th>Time Points</th>
+                                        <th>Completed</th>
+                                        <th>Time Crystal</th>
+                                        <th>Comb Detected</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for sim in simulations %}
+                                    <tr>
+                                        <td>{{ sim.id }}</td>
+                                        <td>{{ sim.circuit_type }}</td>
+                                        <td>{{ sim.qubits }}</td>
+                                        <td>{{ sim.time_points }}</td>
+                                        <td>{{ sim.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                        <td>
+                                            {% if sim.time_crystal_detected %}
+                                                <span class="badge bg-success">Yes</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">No</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if sim.linear_combs_detected or sim.log_combs_detected %}
+                                                <span class="badge bg-success">Yes</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">No</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <a href="{{ url_for('view_result', result_name=sim.result_name) }}" class="btn btn-sm btn-info">View</a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">No simulation results found.</div>
+                    {% endif %}
                 </div>
-                {% endif %}
             </div>
         </div>
     </div>
 </div>
-
-<div class="row">
-    <div class="col">
-        <h3 class="mb-3">Recent Results</h3>
-        <div class="row row-cols-1 row-cols-md-3 g-4">
-            {% for result in recent_results %}
-            <div class="col">
-                <div class="card result-card h-100">
-                    <div class="card-body">
-                        <h5 class="card-title text-truncate">{{ result }}</h5>
-                        <p class="card-text">
-                            {{ result.split('_')[0] }} circuit ({{ result.split('_')[-2] }})
-                        </p>
-                    </div>
-                    <div class="card-footer bg-transparent border-top-0">
-                        <a href="{{ url_for('view_result', result_name=result) }}" class="btn btn-sm btn-outline-primary">View Results</a>
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-</div>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize popovers
-    const popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
-    const popoverList = popoverTriggerList.map(function(popoverTriggerEl) {
-        return new bootstrap.Popover(popoverTriggerEl);
-    });
-
-    // Auto-refresh simulation status for running simulations
-    const runningSimulations = document.querySelectorAll('.simulation-row');
-    if (runningSimulations.length > 0) {
-        setInterval(function() {
-            runningSimulations.forEach(function(row) {
-                const simId = row.getAttribute('data-sim-id');
-                if (simId) {
-                    fetch(`/simulation_status/${simId}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data && !data.error) {
-                                const progressBar = row.querySelector('.progress-bar');
-                                if (progressBar) {
-                                    progressBar.style.width = `${data.progress}%`;
-                                    progressBar.setAttribute('aria-valuenow', data.progress);
-                                    progressBar.textContent = `${data.progress}%`;
-                                }
-                                
-                                // If status changed, refresh the page
-                                const currentStatus = row.querySelector('.badge').textContent.trim().toLowerCase();
-                                if (data.status !== currentStatus && 
-                                   (data.status === 'completed' || data.status === 'error')) {
-                                    window.location.reload();
-                                }
-                            }
-                        })
-                        .catch(error => console.error('Error fetching simulation status:', error));
-                }
-            });
-        }, 5000); // Check every 5 seconds
-    }
-});
-</script>
 {% endblock %}

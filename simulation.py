@@ -380,8 +380,8 @@ def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
         print(f"Simulation completed in {elapsed_time:.2f} seconds")
         print(f"Results {'saved to ' + res_path if save_results else 'not saved'}")
     
-    # Return combined results
-    return {
+    # Create results dictionary
+    results = {
         'parameters': {
             'circuit_type': circuit_type,
             'qubits': qubits,
@@ -397,8 +397,38 @@ def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
         'fc_analysis': fc_analysis,
         'comb_analysis': comb_analysis,
         'log_comb_analysis': log_comb_analysis,
+        'results_path': res_path,
+        'figures_path': fig_path,
+        'numeric_data_path': data_path,
         'elapsed_time': elapsed_time
     }
+    
+    # Save to database if requested
+    if save_results:
+        try:
+            # Use flask app context to work with database
+            from flask import current_app
+            if current_app:
+                with current_app.app_context():
+                    from db_utils import save_simulation_to_db
+                    # Use folder name as result_name
+                    folder_name = os.path.basename(res_path) if res_path else f"{circuit_type}_{param_set_name}"
+                    db_result = save_simulation_to_db(results, folder_name)
+                    if verbose:
+                        print(f"Saved to database with ID: {db_result.id}")
+        except Exception as e:
+            if verbose:
+                print(f"Warning: Could not save to database: {e}")
+    
+    # Print key findings for console output
+    if verbose:
+        print(f"Simulation completed successfully!")
+        print(f"Drive frequency: {analysis.get('drive_frequency', 0):.4f}")
+        print(f"Time crystal detected: {analysis.get('has_subharmonics', False)}")
+        print(f"Incommensurate frequencies detected: {fc_analysis.get('incommensurate_peak_count', 0)}")
+    
+    # Return the results
+    return results
 
 def run_parameter_scan(circuit_type, parameter_sets, scan_name='parameter_scan',
                      save_results=True, show_plots=False, verbose=True,
