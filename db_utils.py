@@ -24,32 +24,31 @@ def save_simulation_to_db(result, result_name):
     log_comb_analysis = result.get('log_comb_analysis', {})
     
     # Create simulation result record
-    sim_result = SimulationResult(
-        result_name=result_name,
-        circuit_type=params.get('circuit_type', ''),
-        qubits=params.get('qubits', 0),
-        shots=params.get('shots', 0),
-        drive_steps=params.get('drive_steps', 0),
-        time_points=params.get('time_points', 0),
-        max_time=params.get('max_time', 0.0),
-        drive_param=params.get('drive_param', 0.0),
-        init_state=params.get('init_state', ''),
-        
-        drive_frequency=analysis.get('drive_frequency', 0.0),
-        time_crystal_detected=analysis.get('has_subharmonics', False),
-        incommensurate_count=fc_analysis.get('incommensurate_peak_count', 0),
-        linear_combs_detected=(
-            comb_analysis.get('mx_comb_found', False) or 
-            comb_analysis.get('mz_comb_found', False)
-        ),
-        log_combs_detected=(
-            log_comb_analysis.get('mx_log_comb_found', False) or 
-            log_comb_analysis.get('mz_log_comb_found', False)
-        ),
-        
-        results_path=result.get('results_path', ''),
-        elapsed_time=result.get('elapsed_time', 0.0)
+    sim_result = SimulationResult()
+    sim_result.result_name = result_name
+    sim_result.circuit_type = params.get('circuit_type', '')
+    sim_result.qubits = params.get('qubits', 0)
+    sim_result.shots = params.get('shots', 0)
+    sim_result.drive_steps = params.get('drive_steps', 0)
+    sim_result.time_points = params.get('time_points', 0)
+    sim_result.max_time = params.get('max_time', 0.0)
+    sim_result.drive_param = params.get('drive_param', 0.0)
+    sim_result.init_state = params.get('init_state', '')
+    
+    sim_result.drive_frequency = analysis.get('drive_frequency', 0.0)
+    sim_result.time_crystal_detected = analysis.get('has_subharmonics', False)
+    sim_result.incommensurate_count = fc_analysis.get('incommensurate_peak_count', 0)
+    sim_result.linear_combs_detected = (
+        comb_analysis.get('mx_comb_found', False) or 
+        comb_analysis.get('mz_comb_found', False)
     )
+    sim_result.log_combs_detected = (
+        log_comb_analysis.get('mx_log_comb_found', False) or 
+        log_comb_analysis.get('mz_log_comb_found', False)
+    )
+    
+    sim_result.results_path = result.get('results_path', '')
+    sim_result.elapsed_time = result.get('elapsed_time', 0.0)
     
     # Store additional data that doesn't fit in the schema
     extra_data = {
@@ -100,15 +99,14 @@ def save_peaks(simulation_id, analysis, fc_analysis):
                 is_harmonic = i in harmonic_indices
                 
                 # Create peak record
-                peak = FrequencyPeak(
-                    simulation_id=simulation_id,
-                    frequency=freq,
-                    amplitude=amps[i],
-                    phase=phase,
-                    component=component,
-                    is_harmonic=is_harmonic,
-                    is_incommensurate=is_incomm
-                )
+                peak = FrequencyPeak()
+                peak.simulation_id = simulation_id
+                peak.frequency = freq
+                peak.amplitude = amps[i]
+                peak.phase = phase
+                peak.component = component
+                peak.is_harmonic = is_harmonic
+                peak.is_incommensurate = is_incomm
                 db.session.add(peak)
     
     db.session.commit()
@@ -119,28 +117,26 @@ def save_combs(simulation_id, comb_analysis, log_comb_analysis):
     for component in ['mx', 'mz']:
         comb_found = comb_analysis.get(f'{component}_comb_found', False)
         if comb_found:
-            comb = CombStructure(
-                simulation_id=simulation_id,
-                component=component,
-                is_logarithmic=False,
-                base_frequency=comb_analysis.get(f'{component}_base_freq', 0.0),
-                spacing=comb_analysis.get(f'{component}_best_omega', 0.0),
-                num_teeth=comb_analysis.get(f'{component}_num_teeth', 0)
-            )
+            comb = CombStructure()
+            comb.simulation_id = simulation_id
+            comb.component = component
+            comb.is_logarithmic = False
+            comb.base_frequency = comb_analysis.get(f'{component}_base_freq', 0.0)
+            comb.spacing = comb_analysis.get(f'{component}_best_omega', 0.0)
+            comb.num_teeth = comb_analysis.get(f'{component}_num_teeth', 0)
             db.session.add(comb)
     
     # Process logarithmic combs
     for component in ['mx', 'mz']:
         log_comb_found = log_comb_analysis.get(f'{component}_log_comb_found', False)
         if log_comb_found:
-            log_comb = CombStructure(
-                simulation_id=simulation_id,
-                component=component,
-                is_logarithmic=True,
-                base_frequency=log_comb_analysis.get(f'{component}_base_freq', 0.0),
-                spacing=log_comb_analysis.get(f'{component}_best_r', 0.0),
-                num_teeth=log_comb_analysis.get(f'{component}_log_num_teeth', 0)
-            )
+            log_comb = CombStructure()
+            log_comb.simulation_id = simulation_id
+            log_comb.component = component
+            log_comb.is_logarithmic = True
+            log_comb.base_frequency = log_comb_analysis.get(f'{component}_base_freq', 0.0)
+            log_comb.spacing = log_comb_analysis.get(f'{component}_best_r', 0.0)
+            log_comb.num_teeth = log_comb_analysis.get(f'{component}_log_num_teeth', 0)
             db.session.add(log_comb)
     
     db.session.commit()
