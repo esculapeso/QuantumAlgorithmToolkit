@@ -1,0 +1,522 @@
+"""
+Simulation control module for quantum simulation package.
+Contains functions to run simulations with different parameters.
+"""
+
+import numpy as np
+import os
+import json
+import datetime
+import traceback
+import pandas as pd
+import time
+import sys
+import itertools
+from qiskit import transpile
+from qiskit.quantum_info import Statevector
+
+try:
+    from qiskit_aer import AerSimulator
+except ImportError:
+    try:
+        from qiskit.providers.aer import AerSimulator
+    except ImportError:
+        print("ERROR: AerSimulator not found even after install attempt.")
+        AerSimulator = None
+
+import config
+from utils import is_harmonic_related, format_param, create_folder_structure, setup_gdrive_if_needed, save_to_gdrive
+from quantum_circuits import get_circuit_generator
+from analysis import run_expectation_and_fft_analysis, analyze_fft_peaks_for_fc, analyze_frequency_comb, analyze_log_frequency_comb
+from visualization import plot_expectation_values, plot_fft_analysis, plot_frequency_comb_analysis, plot_log_comb_analysis, plot_circuit_diagram
+
+def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
+                  time_points=100, max_time=10.0, drive_param=0.9,
+                  init_state='superposition', param_set_name='default',
+                  save_results=True, show_plots=False, aer_method='statevector',
+                  plot_circuit=True, verbose=True):
+    """
+    Run a single quantum simulation with specified parameters.
+    
+    Args:
+        circuit_type (str): Type of quantum circuit to use ('penrose', 'qft_basic', etc)
+        qubits (int): Number of qubits in the circuit
+        shots (int): Number of measurement shots in the simulation
+        drive_steps (int): Number of drive sequence repetitions
+        time_points (int): Number of time points to simulate
+        max_time (float): Maximum simulation time
+        drive_param (float): Parameter controlling the drive strength
+        init_state (str): Initial state specification ('superposition', '|00>', etc)
+        param_set_name (str): Name for this parameter set (for file naming)
+        save_results (bool): Whether to save results to disk
+        show_plots (bool): Whether to display plots
+        aer_method (str): Simulation method ('statevector', 'matrix_product_state', etc)
+        plot_circuit (bool): Whether to plot the circuit diagram
+        verbose (bool): Whether to print progress messages
+    
+    Returns:
+        dict: Results of the simulation, including analysis
+    """
+    start_time = time.time()
+    
+    # Create folder structure for saving results
+    if save_results:
+        fig_path, res_path, data_path = create_folder_structure(circuit_type, param_set_name)
+        gdrive_save_path = setup_gdrive_if_needed()
+    else:
+        fig_path, res_path, data_path = None, None, None
+        gdrive_save_path = None
+    
+    # Get the circuit generator function
+    try:
+        circuit_generator = get_circuit_generator(circuit_type)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return {"error": str(e)}
+    
+    # Generate the circuit with time parameter
+    try:
+        circuit, t = circuit_generator(qubits, shots, drive_steps, init_state, drive_param)
+    except Exception as e:
+        print(f"Error generating circuit: {e}")
+        traceback.print_exc()
+        return {"error": f"Circuit generation failed: {str(e)}"}
+    
+    # Print/save circuit information
+    if verbose:
+        print(f"Generated {circuit_type} circuit with {qubits} qubits")
+        print(f"Circuit depth: {circuit.depth()}")
+    
+    # Plot circuit diagram once
+    if plot_circuit and save_results:
+        # Plot with a sample time value to show the structure
+        sample_t_value = max_time / 2.0
+        plot_circuit_diagram(circuit, time_value=sample_t_value,
+                           circuit_type=circuit_type, qubit_count=qubits,
+                           save_path=fig_path)
+
+    # Create the simulator
+    try:
+        simulator = AerSimulator(method=aer_method)
+    except Exception as e:
+        print(f"Error creating simulator: {e}")
+        return {"error": f"Simulator creation failed: {str(e)}"}
+    
+    # Time points to evaluate
+    times = np.linspace(0, max_time, time_points)
+    
+    # Calculate the fundamental (drive) frequency based on oscillation period
+    drive_freq = 1.0 / max_time  # Assumes one full oscillation in max_time
+    
+    # Initialize storage for expectation values
+    expectation_values = {
+        'mx': np.zeros(time_points),
+        'my': np.zeros(time_points),
+        'mz': np.zeros(time_points)
+    }
+    
+    # Run simulation for each time point
+    if verbose:
+        print(f"Starting simulation across {time_points} time points...")
+    
+    for i, time_val in enumerate(times):
+        # Bind the time parameter to a specific value
+        bound_circuit = circuit.bind_parameters({t: time_val})
+        
+        # Transpile circuit for the target backend
+        transpiled_circuit = transpile(bound_circuit, simulator)
+        
+        try:
+            # Execute the circuit
+            if aer_method == 'statevector':
+                # Statevector simulation
+                result = simulator.run(transpiled_circuit).result()
+                statevec = Statevector(result.get_statevector())
+                
+                # Calculate expectation values (Pauli operators)
+                for q in range(qubits):
+                    # For multi-qubit systems, we average over all qubits
+                    pauli_x = np.zeros((2**qubits, 2**qubits), dtype=complex)
+                    pauli_y = np.zeros((2**qubits, 2**qubits), dtype=complex)
+                    pauli_z = np.zeros((2**qubits, 2**qubits), dtype=complex)
+                    
+                    # Get the tensor product of Pauli matrices (identity for all qubits except one)
+                    # This is a simplified approach - Qiskit has built-in methods for this
+                    for q_idx in range(qubits):
+                        if q_idx == q:
+                            # Pauli matrices for the current qubit
+                            pauli_x_q = np.array([[0, 1], [1, 0]])
+                            pauli_y_q = np.array([[0, -1j], [1j, 0]])
+                            pauli_z_q = np.array([[1, 0], [0, -1]])
+                        else:
+                            # Identity for all other qubits
+                            identity = np.eye(2)
+                            # Tensor product (simplified)
+                            pauli_x = np.kron(pauli_x, pauli_x_q) if q_idx == q else np.kron(pauli_x, identity)
+                            pauli_y = np.kron(pauli_y, pauli_y_q) if q_idx == q else np.kron(pauli_y, identity)
+                            pauli_z = np.kron(pauli_z, pauli_z_q) if q_idx == q else np.kron(pauli_z, identity)
+                    
+                    # Calculate expectation values using the statevector
+                    expectation_values['mx'][i] += statevec.expectation_value(pauli_x) / qubits
+                    expectation_values['my'][i] += statevec.expectation_value(pauli_y) / qubits
+                    expectation_values['mz'][i] += statevec.expectation_value(pauli_z) / qubits
+            else:
+                # Measurement-based simulation
+                # Add measurements
+                meas_circuit = transpiled_circuit.copy()
+                meas_circuit.measure_all()
+                
+                # Run with shots
+                result = simulator.run(meas_circuit, shots=shots).result()
+                counts = result.get_counts()
+                
+                # Calculate expectation values from counts
+                total_shots = sum(counts.values())
+                
+                for q in range(qubits):
+                    # Initialize accumulators for this qubit
+                    q_mx, q_my, q_mz = 0, 0, 0
+                    
+                    # Process each measurement outcome
+                    for bitstring, count in counts.items():
+                        # Reverse bitstring to match qubit ordering
+                        rev_bitstring = bitstring[::-1]
+                        
+                        # Get state of this qubit (0 or 1)
+                        q_state = int(rev_bitstring[q]) if q < len(rev_bitstring) else 0
+                        
+                        # +1 for |0⟩ and -1 for |1⟩ for Z
+                        q_mz += (1 - 2 * q_state) * count
+                        
+                        # X and Y are more complex and would require measurements in different bases
+                        # This is an approximation - a real implementation would rotate and measure
+                        # TODO: For now, we're setting X and Y to 0 in this simulation method
+                    
+                    # Normalize by total shots and accumulate for this qubit
+                    expectation_values['mz'][i] += q_mz / total_shots / qubits
+                    # TODO: X and Y values are not accurately calculated in this simple approach
+        
+        except Exception as e:
+            print(f"Error during simulation at time {time_val}: {e}")
+            traceback.print_exc()
+            return {"error": f"Simulation failed at time {time_val}: {str(e)}"}
+        
+        # Progress indicator
+        if verbose and (i+1) % max(1, time_points // 10) == 0:
+            print(f"  Completed {i+1}/{time_points} time points ({(i+1)/time_points*100:.1f}%)")
+    
+    # Run FFT analysis on the expectation values
+    analysis = run_expectation_and_fft_analysis(expectation_values, times, drive_freq)
+    
+    # Run frequency crystal analysis
+    fc_analysis = analyze_fft_peaks_for_fc(analysis)
+    
+    # Analyze for frequency combs
+    comb_analysis = analyze_frequency_comb(analysis, fc_analysis)
+    
+    # Analyze for logarithmic frequency combs
+    log_comb_analysis = analyze_log_frequency_comb(analysis)
+    
+    # Plot results
+    if save_results or show_plots:
+        # Base plots
+        plot_expectation_values(times, expectation_values, 
+                               plot_title=f'{circuit_type} Circuit - Expectation Values',
+                               show_plot=show_plots, save_path=fig_path)
+        
+        plot_fft_analysis(analysis, drive_freq=drive_freq,
+                         plot_title=f'{circuit_type} Circuit - FFT Analysis',
+                         show_plot=show_plots, save_path=fig_path,
+                         fc_analysis=fc_analysis)
+        
+        # Comb analysis plots
+        if comb_analysis.get('mx_comb_found', False) or comb_analysis.get('mz_comb_found', False):
+            plot_frequency_comb_analysis(analysis, comb_analysis, drive_freq=drive_freq,
+                                        plot_title=f'{circuit_type} - Frequency Comb Analysis',
+                                        show_plot=show_plots, save_path=fig_path)
+        
+        # Log comb analysis plots
+        if log_comb_analysis.get('mx_log_comb_found', False) or log_comb_analysis.get('mz_log_comb_found', False):
+            plot_log_comb_analysis(analysis, log_comb_analysis,
+                                  plot_title=f'{circuit_type} - Logarithmic Comb Analysis',
+                                  show_plot=show_plots, save_path=fig_path)
+    
+    # Save numerical data if requested
+    if save_results:
+        # Save raw expectation values
+        exp_data = {
+            'times': times.tolist(),
+            'mx': expectation_values['mx'].tolist(),
+            'my': expectation_values['my'].tolist(),
+            'mz': expectation_values['mz'].tolist()
+        }
+        with open(os.path.join(data_path, 'expectation_values.json'), 'w') as f:
+            json.dump(exp_data, f, indent=2)
+        
+        # Save FFT data
+        fft_data = {
+            'positive_frequencies': analysis.get('positive_frequencies', []).tolist(),
+            'mx_fft_pos': analysis.get('mx_fft_pos', []).tolist(),
+            'my_fft_pos': analysis.get('my_fft_pos', []).tolist(),
+            'mz_fft_pos': analysis.get('mz_fft_pos', []).tolist()
+        }
+        with open(os.path.join(data_path, 'fft_data.json'), 'w') as f:
+            json.dump(fft_data, f, indent=2)
+        
+        # Save analysis results
+        analysis_results = {
+            'parameters': {
+                'circuit_type': circuit_type,
+                'qubits': qubits,
+                'shots': shots,
+                'drive_steps': drive_steps,
+                'time_points': time_points,
+                'max_time': max_time,
+                'drive_param': drive_param,
+                'init_state': init_state
+            },
+            'basic_analysis': {
+                'drive_frequency': analysis.get('drive_frequency', 0),
+                'has_subharmonics': analysis.get('has_subharmonics', False),
+                'primary_mx_freq': analysis.get('primary_mx_freq', 0),
+                'primary_mz_freq': analysis.get('primary_mz_freq', 0)
+            },
+            'frequency_crystal_analysis': {
+                'incommensurate_peak_count': fc_analysis.get('incommensurate_peak_count', 0),
+                'strongest_incommensurate_peak': fc_analysis.get('strongest_incommensurate_peak', None)
+            },
+            'linear_comb_analysis': {
+                'mx_comb_found': comb_analysis.get('mx_comb_found', False),
+                'mx_best_omega': comb_analysis.get('mx_best_omega', 0),
+                'mx_num_teeth': comb_analysis.get('mx_num_teeth', 0),
+                'mz_comb_found': comb_analysis.get('mz_comb_found', False),
+                'mz_best_omega': comb_analysis.get('mz_best_omega', 0),
+                'mz_num_teeth': comb_analysis.get('mz_num_teeth', 0)
+            },
+            'log_comb_analysis': {
+                'mx_log_comb_found': log_comb_analysis.get('mx_log_comb_found', False),
+                'mx_best_r': log_comb_analysis.get('mx_best_r', 0),
+                'mx_base_freq': log_comb_analysis.get('mx_base_freq', 0),
+                'mx_log_num_teeth': log_comb_analysis.get('mx_log_num_teeth', 0),
+                'mz_log_comb_found': log_comb_analysis.get('mz_log_comb_found', False),
+                'mz_best_r': log_comb_analysis.get('mz_best_r', 0),
+                'mz_base_freq': log_comb_analysis.get('mz_base_freq', 0),
+                'mz_log_num_teeth': log_comb_analysis.get('mz_log_num_teeth', 0)
+            }
+        }
+        with open(os.path.join(res_path, 'analysis_results.json'), 'w') as f:
+            json.dump(analysis_results, f, indent=2)
+        
+        # Save potential FC peak data
+        fc_peaks_data = {
+            'potential_fc_peaks': fc_analysis.get('potential_fc_peaks', [])
+        }
+        with open(os.path.join(data_path, 'fc_peaks_data.json'), 'w') as f:
+            json.dump(fc_peaks_data, f, indent=2)
+        
+        # Save to Google Drive if enabled
+        if gdrive_save_path:
+            save_to_gdrive(gdrive_save_path, fig_path, res_path, data_path)
+    
+    # Calculate elapsed time
+    elapsed_time = time.time() - start_time
+    
+    if verbose:
+        print(f"Simulation completed in {elapsed_time:.2f} seconds")
+        print(f"Results {'saved to ' + res_path if save_results else 'not saved'}")
+    
+    # Return combined results
+    return {
+        'parameters': {
+            'circuit_type': circuit_type,
+            'qubits': qubits,
+            'shots': shots,
+            'drive_steps': drive_steps,
+            'time_points': time_points,
+            'max_time': max_time,
+            'drive_param': drive_param,
+            'init_state': init_state
+        },
+        'expectation_values': expectation_values,
+        'analysis': analysis,
+        'fc_analysis': fc_analysis,
+        'comb_analysis': comb_analysis,
+        'log_comb_analysis': log_comb_analysis,
+        'elapsed_time': elapsed_time
+    }
+
+def run_parameter_scan(circuit_type, parameter_sets, scan_name='parameter_scan',
+                     save_results=True, show_plots=False, verbose=True,
+                     aer_method='statevector'):
+    """
+    Run simulations over a range of parameters.
+    
+    Args:
+        circuit_type (str): Type of quantum circuit to use
+        parameter_sets (list): List of parameter dictionaries to scan over
+        scan_name (str): Name for this parameter scan
+        save_results (bool): Whether to save results to disk
+        show_plots (bool): Whether to display plots
+        verbose (bool): Whether to print progress messages
+        aer_method (str): Simulation method
+    
+    Returns:
+        list: Results for each parameter set
+    """
+    start_time = time.time()
+    
+    # Create folder for scan results
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    scan_folder = f"{circuit_type}_{scan_name}_{timestamp}"
+    
+    if save_results:
+        scan_path = os.path.join(config.RESULTS_BASE_PATH, scan_folder)
+        os.makedirs(scan_path, exist_ok=True)
+        
+        # Set up Google Drive if enabled
+        gdrive_save_path = setup_gdrive_if_needed()
+        if gdrive_save_path:
+            gdrive_scan_path = os.path.join(gdrive_save_path, scan_folder)
+            os.makedirs(gdrive_scan_path, exist_ok=True)
+    else:
+        scan_path = None
+        gdrive_save_path = None
+    
+    # Initialize results storage
+    all_results = []
+    summary_data = []
+    
+    # Loop through each parameter set
+    for i, params in enumerate(parameter_sets):
+        if verbose:
+            print(f"\nRunning parameter set {i+1}/{len(parameter_sets)}:")
+            for key, value in params.items():
+                print(f"  {key}: {value}")
+        
+        # Create a name for this parameter set
+        param_values = []
+        for key, value in params.items():
+            formatted_value = format_param(value, '.2f' if isinstance(value, float) else '')
+            param_values.append(f"{key}={formatted_value}")
+        param_set_name = '_'.join(param_values)
+        
+        # Run simulation with these parameters
+        try:
+            # Merge the parameter set with default settings
+            sim_params = {
+                'circuit_type': circuit_type,
+                'param_set_name': param_set_name,
+                'save_results': save_results,
+                'show_plots': show_plots,
+                'aer_method': aer_method,
+                'verbose': verbose
+            }
+            sim_params.update(params)
+            
+            # Actually run the simulation
+            result = run_simulation(**sim_params)
+            
+            if 'error' in result:
+                print(f"Error in parameter set {i+1}: {result['error']}")
+                summary_row = {
+                    'param_set': i+1,
+                    'status': 'error',
+                    'error_message': result['error']
+                }
+                summary_row.update(params)
+                summary_data.append(summary_row)
+                continue
+            
+            # Extract key results for summary
+            summary_row = {
+                'param_set': i+1,
+                'status': 'success',
+                'has_subharmonics': result['analysis'].get('has_subharmonics', False),
+                'incommensurate_count': result['fc_analysis'].get('incommensurate_peak_count', 0),
+                'mx_comb_found': result['comb_analysis'].get('mx_comb_found', False),
+                'mx_comb_teeth': result['comb_analysis'].get('mx_num_teeth', 0),
+                'mz_comb_found': result['comb_analysis'].get('mz_comb_found', False),
+                'mz_comb_teeth': result['comb_analysis'].get('mz_num_teeth', 0),
+                'mx_log_comb_found': result['log_comb_analysis'].get('mx_log_comb_found', False),
+                'mz_log_comb_found': result['log_comb_analysis'].get('mz_log_comb_found', False),
+                'elapsed_time': result['elapsed_time']
+            }
+            summary_row.update(params)
+            summary_data.append(summary_row)
+            
+            # Store the full result
+            all_results.append(result)
+            
+        except Exception as e:
+            print(f"Error in parameter set {i+1}: {e}")
+            traceback.print_exc()
+            summary_row = {
+                'param_set': i+1,
+                'status': 'exception',
+                'error_message': str(e)
+            }
+            summary_row.update(params)
+            summary_data.append(summary_row)
+    
+    # Create summary table
+    if save_results and summary_data:
+        summary_df = pd.DataFrame(summary_data)
+        
+        # Save as CSV
+        summary_csv_path = os.path.join(scan_path, 'summary_results.csv')
+        summary_df.to_csv(summary_csv_path, index=False)
+        
+        # Also save as more readable Excel if pandas supports it
+        try:
+            summary_excel_path = os.path.join(scan_path, 'summary_results.xlsx')
+            summary_df.to_excel(summary_excel_path, index=False, sheet_name='Scan Results')
+        except:
+            # Excel writing might fail if openpyxl is not installed - ignore
+            pass
+        
+        if gdrive_save_path:
+            try:
+                gdrive_csv_path = os.path.join(gdrive_save_path, scan_folder, 'summary_results.csv')
+                summary_df.to_csv(gdrive_csv_path, index=False)
+                
+                try:
+                    gdrive_excel_path = os.path.join(gdrive_save_path, scan_folder, 'summary_results.xlsx')
+                    summary_df.to_excel(gdrive_excel_path, index=False, sheet_name='Scan Results')
+                except:
+                    pass
+            except Exception as e:
+                print(f"Error saving summary to Google Drive: {e}")
+    
+    # Calculate and print total elapsed time
+    total_time = time.time() - start_time
+    if verbose:
+        print(f"\nParameter scan completed in {total_time:.2f} seconds")
+        print(f"Processed {len(parameter_sets)} parameter sets")
+        print(f"Results {'saved to ' + scan_path if save_results else 'not saved'}")
+    
+    return all_results
+
+def generate_parameter_grid(**param_ranges):
+    """
+    Generate a grid of parameter combinations from ranges.
+    
+    Args:
+        param_ranges: Keyword arguments where keys are parameter names and
+                     values are lists of parameter values to scan.
+    
+    Returns:
+        list: List of parameter dictionaries covering all combinations
+    """
+    param_names = list(param_ranges.keys())
+    param_values = list(param_ranges.values())
+    
+    # Generate all combinations
+    combinations = list(itertools.product(*param_values))
+    
+    # Convert to list of dictionaries
+    param_sets = []
+    for combo in combinations:
+        param_dict = {name: value for name, value in zip(param_names, combo)}
+        param_sets.append(param_dict)
+    
+    return param_sets
