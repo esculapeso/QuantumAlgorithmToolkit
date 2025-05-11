@@ -1,0 +1,2342 @@
+# Install necessary packages if running in an environment like Colab
+try:
+    import qiskit
+    import qiskit_aer
+    import matplotlib
+    import scipy
+    import pywt
+    import pandas
+    import numpy as np
+    from scipy import signal
+    from scipy.integrate import simps # Using Simpson's rule for potential integration
+    import traceback
+    print("Required packages seem to be installed.")
+except ImportError:
+    print("Attempting to install required packages: qiskit, qiskit-aer, matplotlib, scipy, pywavelets, pandas...")
+    # Use pip on the system level to install
+    import subprocess
+    import sys
+    try:
+        # Ensure pip is available and install packages
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "qiskit", "qiskit-aer", "pywavelets"])
+        print("Installation successful.")
+        # Need to import again after installation
+        import qiskit
+        import qiskit_aer
+        import pywt
+    except subprocess.CalledProcessError as e:
+        print(f"ERROR: Failed to install required packages: {e}")
+        sys.exit(1) # Exit if installation fails
+    except ImportError:
+        print("ERROR: Still unable to import required packages after attempting installation.")
+        sys.exit(1) # Exit if import fails after install attempt
+    except Exception as e:
+        print(f"An unexpected error occurred during package check/install: {e}")
+        sys.exit(1)
+
+
+#!/usr/bin/env python3
+"""
+Quantum Circuit Simulator with Selection - Time & Frequency Crystals
+=================================================================
+This implementation simulates quantum systems, allowing selection between
+different circuit architectures: 'penrose', 'qft_basic', 'comb_generator',
+'comb_twistor', and 'graphene_fc'.
+
+Analysis focuses on time crystal (subharmonic) and frequency crystal
+(incommensurate frequency) detection using FFT analysis.
+Includes analysis for both linear frequency combs (constant spacing Omega)
+and logarithmic frequency combs (constant scaling factor R).
+
+Includes visualization, automated parameter scanning, saving of numeric
+FFT data, optional Google Drive saving, and organized output folders.
+Prints the generated circuit diagram once per run.
+
+Version: 5.7 (Added Logarithmic Comb Analysis)
+"""
+
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy import signal
+from scipy.linalg import sqrtm # For state fidelity calculation (if needed)
+import pywt # Ensure PyWavelets is installed (`pip install PyWavelets`)
+import random
+import itertools # Added for parameter combinations
+import pandas as pd # Added for summary table
+from fractions import Fraction # Added for incommensurability check
+
+import os
+import json
+import datetime
+from matplotlib.figure import Figure
+import traceback # For detailed error printing
+import sys # Import sys for exiting
+
+# --- Google Drive Mounting (for Colab) ---
+SAVE_TO_GOOGLE_DRIVE = True # Defaulting to True as requested
+GDRIVE_MOUNT_POINT = '/content/gdrive'
+GDRIVE_SAVE_FOLDER = 'My Drive/QuantumSimulations' # Example path
+
+# --- Global paths ---
+FIGURES_BASE_PATH = 'figures'
+RESULTS_BASE_PATH = 'results'
+NUMERIC_DATA_BASE_PATH = 'numeric_data'
+os.makedirs(FIGURES_BASE_PATH, exist_ok=True)
+os.makedirs(RESULTS_BASE_PATH, exist_ok=True)
+os.makedirs(NUMERIC_DATA_BASE_PATH, exist_ok=True)
+
+# --- Qiskit Imports ---
+# Imports are now handled after the installation block above
+from qiskit import QuantumCircuit, transpile
+from qiskit.circuit import Parameter
+from qiskit.circuit.library import QFT
+from qiskit.quantum_info import Statevector
+try: from qiskit_aer import AerSimulator
+except ImportError:
+    # This fallback might be less relevant now but kept for safety
+    try: from qiskit.providers.aer import AerSimulator
+    except ImportError: print("ERROR: AerSimulator not found even after install attempt."); AerSimulator = None
+
+# === Helper Functions ===
+
+def is_harmonic_related(freq, drive_freq, tolerance=0.15, max_n=10, max_m=5):
+    """Checks relationship between freq and drive_freq."""
+    # (Implementation unchanged)
+    if freq <= 1e-9 or drive_freq <= 1e-9: return False, "N/A (zero freq)"
+    if abs(freq / drive_freq - 1.0) < tolerance: return True, "drive"
+    for n in range(2, max_n + 1): # Subharmonics
+        expected = drive_freq / n
+        if abs(freq / expected - 1.0) < tolerance: return True, f"drive/{n}"
+    for n in range(2, max_n + 1): # Harmonics
+        expected = drive_freq * n
+        if abs(freq / expected - 1.0) < tolerance: return True, f"drive*{n}"
+    for n in range(2, max_n + 1): # Fractional
+        for m in range(1, max_m + 1):
+            if n == m: continue
+            expected = drive_freq * m / n
+            if abs(freq / expected - 1.0) < tolerance: return True, f"drive*{m}/{n}"
+    return False, "non-harmonic"
+
+def format_param(value, fmt_spec):
+    """Safely formats numeric values, passes others as strings."""
+    if isinstance(value, (int, float)):
+        try: return f"{value:{fmt_spec}}"
+        except ValueError: return str(value)
+    else: return str(value)
+
+# === Analysis Functions ===
+
+def analyze_fft_peaks_for_fc(analysis,
+                             peak_height_threshold=0.05,
+                             max_rational_denominator=50,
+                             rational_tolerance=1e-3,
+                             harmonic_tolerance=0.10):
+    """Analyzes FFT peaks to identify potentially incommensurate frequencies."""
+    # (Implementation unchanged)
+    potential_fc_peaks = []; incommensurate_peak_count = 0; strongest_incommensurate_peak = None; max_incommensurate_amp = 0
+    drive_freq = analysis.get('drive_frequency', 0)
+    if drive_freq <= 1e-9: return {'potential_fc_peaks': [], 'incommensurate_peak_count': 0, 'strongest_incommensurate_peak': None}
+    pos_freqs = analysis.get('positive_frequencies', np.array([])); mx_fft_pos_amp = analysis.get('mx_fft_pos', np.array([])); mz_fft_pos_amp = analysis.get('mz_fft_pos', np.array([]))
+    if pos_freqs.size == 0 or mx_fft_pos_amp.size == 0 or mz_fft_pos_amp.size == 0: return {'potential_fc_peaks': [], 'incommensurate_peak_count': 0, 'strongest_incommensurate_peak': None}
+    try:
+        fft_len = len(pos_freqs); distance = max(3, int(fft_len / 200))
+        mx_peaks_indices = signal.find_peaks(mx_fft_pos_amp, height=peak_height_threshold, distance=distance)[0]
+        mz_peaks_indices = signal.find_peaks(mz_fft_pos_amp, height=peak_height_threshold, distance=distance)[0]
+    except Exception as e: print(f"Warning [analyze_fft_peaks_for_fc]: Error finding peaks: {e}"); return {'potential_fc_peaks': [], 'incommensurate_peak_count': 0, 'strongest_incommensurate_peak': None}
+    all_peaks_data = {}
+    for idx in mx_peaks_indices:
+        freq = pos_freqs[idx]; amp = mx_fft_pos_amp[idx]
+        if freq not in all_peaks_data or amp > all_peaks_data[freq]['amplitude']: all_peaks_data[freq] = {'frequency': freq, 'amplitude': amp, 'basis': 'Mx'}
+    for idx in mz_peaks_indices:
+        freq = pos_freqs[idx]; amp = mz_fft_pos_amp[idx]
+        if freq not in all_peaks_data or amp > all_peaks_data[freq]['amplitude']: all_peaks_data[freq] = {'frequency': freq, 'amplitude': amp, 'basis': 'Mz'}
+    for freq, peak_data in all_peaks_data.items():
+        is_related, relation = is_harmonic_related(freq, drive_freq, tolerance=harmonic_tolerance)
+        if not is_related:
+            ratio_to_drive = freq / drive_freq; is_potentially_incommensurate = True
+            try:
+                frac = Fraction(ratio_to_drive).limit_denominator(max_rational_denominator)
+                if abs(ratio_to_drive - float(frac)) < rational_tolerance: is_potentially_incommensurate = False; relation = f"~drive*{frac.numerator}/{frac.denominator}"
+            except (ValueError, OverflowError): pass # Keep True if error
+            peak_info = { 'frequency': freq, 'amplitude': peak_data['amplitude'], 'basis': peak_data['basis'], 'ratio_to_drive': ratio_to_drive, 'relation_guess': relation, 'is_potentially_incommensurate': is_potentially_incommensurate }
+            potential_fc_peaks.append(peak_info)
+            if is_potentially_incommensurate:
+                incommensurate_peak_count += 1
+                if peak_data['amplitude'] > max_incommensurate_amp: max_incommensurate_amp = peak_data['amplitude']; strongest_incommensurate_peak = peak_info
+    return { 'potential_fc_peaks': potential_fc_peaks, 'incommensurate_peak_count': incommensurate_peak_count, 'strongest_incommensurate_peak': strongest_incommensurate_peak }
+
+def analyze_frequency_comb(analysis, fc_fft_analysis,
+                           min_omega_cand_amp=0.1,
+                           min_comb_teeth=3,
+                           freq_tolerance_factor=0.05,
+                           max_amp_rel_std_dev=0.5,
+                           max_phase_step_std_dev=0.5):
+    """
+    Analyzes complex FFT data for LINEAR frequency comb structures (constant spacing).
+    (Implementation unchanged)
+    """
+    results = {
+        'mx_comb_found': False, 'mx_best_omega': 0, 'mx_mean_theta': 0,
+        'mx_amp_rel_std_dev': float('inf'), 'mx_phase_step_std_dev': float('inf'),
+        'mx_best_comb_score': float('inf'), 'mx_num_teeth': 0,
+        'mx_omega_dev': float('inf'), # Initialize Omega deviation for Mx
+        'mx_comb_freqs': [], 'mx_comb_details': [],
+        'mz_comb_found': False, 'mz_best_omega': 0, 'mz_mean_theta': 0,
+        'mz_amp_rel_std_dev': float('inf'), 'mz_phase_step_std_dev': float('inf'),
+        'mz_best_comb_score': float('inf'), 'mz_num_teeth': 0,
+        'mz_omega_dev': float('inf'), # Initialize Omega deviation for Mz
+        'mz_comb_freqs': [], 'mz_comb_details': [],
+    }
+
+    # --- Get necessary data from analysis dictionaries ---
+    pos_freqs = analysis.get('positive_frequencies')
+    mx_fft_complex = analysis.get('mx_fft_complex_pos')
+    mz_fft_complex = analysis.get('mz_fft_complex_pos')
+
+    if pos_freqs is None or mx_fft_complex is None or mz_fft_complex is None or pos_freqs.size == 0:
+        print("Warning [analyze_frequency_comb]: Missing complex FFT data or frequencies.")
+        return results
+
+    # --- Helper function to find nearest index ---
+    def find_nearest_index(array, value):
+        # (Implementation unchanged)
+        idx = np.searchsorted(array, value, side="left")
+        return idx-1 if idx > 0 and (idx == len(array) or abs(value - array[idx-1]) < abs(value - array[idx])) else idx
+
+    # --- Analyze for combs in Mx and Mz separately ---
+    for basis, fft_complex in [('mx', mx_fft_complex), ('mz', mz_fft_complex)]:
+        best_comb_score_found = float('inf') # Use a separate variable to track the best score found *during* the loop for this basis
+
+        # Get significant peak indices and frequencies for this basis
+        peak_indices_key = f'{basis}_peaks_indices'
+        significant_peak_indices = analysis.get(peak_indices_key, np.array([]))
+        if significant_peak_indices.size == 0: continue # Skip if no peaks found
+
+        significant_peak_freqs = pos_freqs[significant_peak_indices]
+        # Amplitudes corresponding to these peaks (using normalized amplitude from analysis['mx_fft_pos'])
+        amp_key = f'{basis}_fft_pos'
+        significant_peak_amps = analysis.get(amp_key, np.array([]))[significant_peak_indices]
+
+        # --- Identify candidate Omegas from ALL significant peaks above threshold ---
+        candidate_omegas = []
+        if significant_peak_freqs.size > 0 and significant_peak_amps.size == significant_peak_freqs.size:
+             # Filter peaks by minimum amplitude threshold
+             valid_omega_indices = np.where(significant_peak_amps >= min_omega_cand_amp)[0]
+             if valid_omega_indices.size > 0:
+                 # Use frequencies of these peaks as candidates, sorted by amplitude
+                 candidate_freqs = significant_peak_freqs[valid_omega_indices]
+                 candidate_amps = significant_peak_amps[valid_omega_indices]
+                 # Sort candidates by amplitude, descending
+                 sorted_cand_indices = np.argsort(candidate_amps)[::-1]
+                 candidate_omegas = candidate_freqs[sorted_cand_indices]
+
+        if len(candidate_omegas) == 0:
+            # print(f"Warning [analyze_frequency_comb]: No significant peaks found above {min_omega_cand_amp} amplitude for basis {basis} to seed Omega candidates.")
+            continue # Cannot proceed without candidate Omegas for this basis
+
+        # --- Iterate through candidate Omegas and start frequencies ---
+        for omega_cand in candidate_omegas:
+            if omega_cand <= 0: continue
+            freq_tolerance = omega_cand * freq_tolerance_factor
+            for start_idx, f0 in enumerate(significant_peak_freqs):
+                comb_indices = [significant_peak_indices[start_idx]]; comb_freqs_found = [f0]
+                # --- Search for comb teeth ---
+                for n in range(1, 20):
+                    target_f = f0 + n * omega_cand; best_match_idx = -1; min_diff = freq_tolerance
+                    for pk_idx, pk_f in enumerate(significant_peak_freqs):
+                        diff = abs(pk_f - target_f)
+                        if diff < min_diff: min_diff = diff; best_match_idx = pk_idx
+                    if best_match_idx != -1:
+                        actual_peak_index = significant_peak_indices[best_match_idx]
+                        if actual_peak_index not in comb_indices: comb_indices.append(actual_peak_index); comb_freqs_found.append(significant_peak_freqs[best_match_idx])
+                        else: break # Stop if we re-find a peak (avoids infinite loops)
+                    else: break # Stop if no peak found within tolerance
+                # --- Analyze potential comb ---
+                num_teeth_found = len(comb_indices) # Get number of teeth
+                if num_teeth_found >= min_comb_teeth:
+                    sorted_order = np.argsort(comb_freqs_found); sorted_indices = np.array(comb_indices)[sorted_order]; sorted_freqs = np.array(comb_freqs_found)[sorted_order]
+                    comb_complex_values = fft_complex[sorted_indices]; comb_amplitudes = np.abs(comb_complex_values); comb_phases = np.angle(comb_complex_values)
+                    # --- Amplitude Check ---
+                    amp_rel_std_dev = np.std(comb_amplitudes) / np.mean(comb_amplitudes) if num_teeth_found > 1 and np.mean(comb_amplitudes) > 1e-9 else float('inf')
+                    # --- Phase Check ---
+                    if num_teeth_found > 1: unwrapped_phases = np.unwrap(comb_phases); phase_steps = np.diff(unwrapped_phases); mean_theta = np.mean(phase_steps); phase_step_std_dev = np.std(phase_steps)
+                    else: mean_theta = 0; phase_step_std_dev = float('inf')
+                    # --- Frequency Spacing Deviation Check ---
+                    if num_teeth_found > 1:
+                        freq_diffs = np.diff(sorted_freqs)
+                        omega_dev = np.std(freq_diffs) if len(freq_diffs) > 0 else float('inf')
+                    else:
+                        omega_dev = float('inf')
+                    # --- Score and Store ---
+                    # Simple score: weighted average of deviations (lower is better)
+                    current_score = 0.3 * amp_rel_std_dev + 0.7 * phase_step_std_dev # Note: omega_dev is not currently part of the score
+                    comb_detail = { 'omega': omega_cand, 'f0': f0, 'num_teeth': num_teeth_found,
+                                    'frequencies': sorted_freqs.tolist(), 'amplitudes': comb_amplitudes.tolist(),
+                                    'phases': comb_phases.tolist(), 'phase_steps': phase_steps.tolist() if num_teeth_found > 1 else [],
+                                    'mean_theta': mean_theta, 'amp_rel_std_dev': amp_rel_std_dev,
+                                    'phase_step_std_dev': phase_step_std_dev, 'omega_dev': omega_dev, # Added omega_dev to details
+                                    'score': current_score }
+                    results[f'{basis}_comb_details'].append(comb_detail)
+
+                    # --- Update Best Comb ---
+                    # Check if this comb meets criteria AND has a better score than the best found so far for this basis
+                    if (amp_rel_std_dev < max_amp_rel_std_dev and
+                        phase_step_std_dev < max_phase_step_std_dev and
+                        current_score < best_comb_score_found): # Use the loop's tracking variable
+                        best_comb_score_found = current_score # Update best score found so far
+                        results[f'{basis}_comb_found'] = True
+                        results[f'{basis}_best_omega'] = omega_cand
+                        results[f'{basis}_mean_theta'] = mean_theta
+                        results[f'{basis}_amp_rel_std_dev'] = amp_rel_std_dev # Store amp dev for best comb
+                        results[f'{basis}_phase_step_std_dev'] = phase_step_std_dev # Store phase dev for best comb
+                        results[f'{basis}_best_comb_score'] = current_score # Store best score in results dict
+                        results[f'{basis}_num_teeth'] = num_teeth_found # Store number of teeth
+                        results[f'{basis}_omega_dev'] = omega_dev # Store omega deviation
+                        results[f'{basis}_comb_freqs'] = sorted_freqs.tolist()
+
+        results[f'{basis}_comb_details'].sort(key=lambda x: x['score']) # Sort details by score
+    return results
+
+# <<< LOG COMB MODIFICATION START >>>
+def analyze_logarithmic_frequency_comb(analysis,
+                                       min_R_cand_amp=0.1,
+                                       min_comb_teeth=3,
+                                       freq_ratio_tolerance=0.05, # Tolerance for freq ratio R
+                                       max_amp_rel_std_dev=0.7, # Allow higher amplitude variation
+                                       max_phase_step_std_dev=0.7): # Allow higher phase variation
+    """
+    Analyzes complex FFT data for LOGARITHMIC frequency comb structures.
+    Looks for peaks with frequencies in geometric progression (f_n = f_0 * R^n)
+    and a constant phase step theta per scaling step R.
+    """
+    results = {
+        'mx_log_comb_found': False, 'mx_best_R': 0, 'mx_log_mean_theta': 0,
+        'mx_log_amp_rel_std_dev': float('inf'), 'mx_log_phase_step_std_dev': float('inf'),
+        'mx_log_best_comb_score': float('inf'), 'mx_log_num_teeth': 0,
+        'mx_log_R_dev': float('inf'), # Std deviation of measured R values
+        'mx_log_comb_freqs': [], 'mx_log_comb_details': [],
+        'mz_log_comb_found': False, 'mz_best_R': 0, 'mz_log_mean_theta': 0,
+        'mz_log_amp_rel_std_dev': float('inf'), 'mz_log_phase_step_std_dev': float('inf'),
+        'mz_log_best_comb_score': float('inf'), 'mz_log_num_teeth': 0,
+        'mz_log_R_dev': float('inf'), # Std deviation of measured R values
+        'mz_log_comb_freqs': [], 'mz_log_comb_details': [],
+    }
+
+    # --- Get necessary data from analysis dictionaries ---
+    pos_freqs = analysis.get('positive_frequencies')
+    mx_fft_complex = analysis.get('mx_fft_complex_pos')
+    mz_fft_complex = analysis.get('mz_fft_complex_pos')
+
+    if pos_freqs is None or mx_fft_complex is None or mz_fft_complex is None or pos_freqs.size < 2: # Need at least 2 peaks
+        print("Warning [analyze_logarithmic_frequency_comb]: Missing complex FFT data or insufficient frequencies.")
+        return results
+
+    # --- Helper function to find nearest index ---
+    def find_nearest_index(array, value):
+        idx = np.searchsorted(array, value, side="left")
+        if idx == 0: return 0
+        if idx == len(array): return len(array) - 1
+        return idx-1 if abs(value - array[idx-1]) < abs(value - array[idx]) else idx
+
+    # --- Analyze for log combs in Mx and Mz separately ---
+    for basis, fft_complex in [('mx', mx_fft_complex), ('mz', mz_fft_complex)]:
+        best_log_comb_score_found = float('inf')
+
+        # Get significant peak indices and frequencies for this basis
+        peak_indices_key = f'{basis}_peaks_indices'
+        significant_peak_indices = analysis.get(peak_indices_key, np.array([]))
+        if significant_peak_indices.size < 2: continue # Need at least 2 peaks to form a ratio
+
+        # Sort significant peaks by frequency
+        sorted_sig_indices_by_freq = significant_peak_indices[np.argsort(pos_freqs[significant_peak_indices])]
+        significant_peak_freqs_sorted = pos_freqs[sorted_sig_indices_by_freq]
+
+        # Amplitudes corresponding to these peaks
+        amp_key = f'{basis}_fft_pos'
+        significant_peak_amps_sorted = analysis.get(amp_key, np.array([]))[sorted_sig_indices_by_freq]
+
+        # --- Identify candidate scaling factors R ---
+        # Calculate ratios between adjacent significant peaks above amplitude threshold
+        candidate_Rs = []
+        min_freq = 1e-6 # Avoid division by zero or near-zero frequencies
+        for i in range(len(significant_peak_freqs_sorted) - 1):
+            f_i = significant_peak_freqs_sorted[i]
+            f_j = significant_peak_freqs_sorted[i+1]
+            amp_i = significant_peak_amps_sorted[i]
+            amp_j = significant_peak_amps_sorted[i+1]
+            # Check amplitude threshold and minimum frequency
+            if amp_i >= min_R_cand_amp and amp_j >= min_R_cand_amp and f_i > min_freq:
+                ratio = f_j / f_i
+                if ratio > 1.0 + freq_ratio_tolerance: # Only consider R > 1 (geometric increase)
+                    candidate_Rs.append(ratio)
+
+        if not candidate_Rs:
+            # print(f"Warning [analyze_log_frequency_comb]: No candidate R values found for basis {basis}.")
+            continue
+
+        # Use unique, sorted candidate R values
+        unique_candidate_Rs = sorted(list(set(candidate_Rs)))
+
+        # --- Iterate through candidate R factors and start frequencies ---
+        for R_cand in unique_candidate_Rs:
+            # Iterate through all significant peaks as potential starting points (f0)
+            for start_idx, f0 in enumerate(significant_peak_freqs_sorted):
+                if f0 <= min_freq: continue # Skip zero/low frequency start points
+
+                comb_indices = [sorted_sig_indices_by_freq[start_idx]]
+                comb_freqs_found = [f0]
+                current_target_f = f0
+
+                # --- Search for comb teeth (increasing frequency: f0 * R^n) ---
+                for n in range(1, 15): # Limit search steps
+                    target_f = current_target_f * R_cand
+                    freq_tolerance_abs = target_f * freq_ratio_tolerance # Absolute tolerance window
+                    best_match_idx = -1
+                    min_diff = freq_tolerance_abs
+
+                    # Search within the significant peaks for the closest match
+                    # Use find_nearest_index for efficiency on sorted frequencies
+                    search_start_idx = find_nearest_index(significant_peak_freqs_sorted, target_f - freq_tolerance_abs)
+                    search_end_idx = find_nearest_index(significant_peak_freqs_sorted, target_f + freq_tolerance_abs)
+
+                    # Check peaks within the potential range
+                    for pk_idx_sorted in range(search_start_idx, search_end_idx + 1):
+                         if pk_idx_sorted >= len(significant_peak_freqs_sorted): continue # Boundary check
+                         pk_f = significant_peak_freqs_sorted[pk_idx_sorted]
+                         diff = abs(pk_f - target_f)
+                         if diff < min_diff:
+                             min_diff = diff
+                             best_match_idx = pk_idx_sorted # Store index in the *sorted* list
+
+                    if best_match_idx != -1:
+                        actual_peak_index = sorted_sig_indices_by_freq[best_match_idx]
+                        if actual_peak_index not in comb_indices:
+                            comb_indices.append(actual_peak_index)
+                            comb_freqs_found.append(significant_peak_freqs_sorted[best_match_idx])
+                            current_target_f = significant_peak_freqs_sorted[best_match_idx] # Update for next iteration
+                        else:
+                            break # Stop if we re-find a peak
+                    else:
+                        break # Stop if no peak found within tolerance
+
+                # --- Analyze potential comb ---
+                num_teeth_found = len(comb_indices)
+                if num_teeth_found >= min_comb_teeth:
+                    # Ensure frequencies are sorted (should be already, but double-check)
+                    sorted_order = np.argsort(comb_freqs_found)
+                    sorted_indices = np.array(comb_indices)[sorted_order]
+                    sorted_freqs = np.array(comb_freqs_found)[sorted_order]
+
+                    comb_complex_values = fft_complex[sorted_indices]
+                    comb_amplitudes = np.abs(comb_complex_values)
+                    comb_phases = np.angle(comb_complex_values)
+
+                    # --- Amplitude Check ---
+                    amp_rel_std_dev = np.std(comb_amplitudes) / np.mean(comb_amplitudes) if num_teeth_found > 1 and np.mean(comb_amplitudes) > 1e-9 else float('inf')
+
+                    # --- Phase Check (constant step theta) ---
+                    if num_teeth_found > 1:
+                        # No unwrapping needed here, as we check step consistency
+                        phase_steps = np.diff(comb_phases)
+                        # Handle phase wraps carefully: normalize steps to [-pi, pi] before averaging/std dev
+                        phase_steps = (phase_steps + np.pi) % (2 * np.pi) - np.pi
+                        mean_theta = np.mean(phase_steps)
+                        phase_step_std_dev = np.std(phase_steps)
+                    else:
+                        mean_theta = 0
+                        phase_step_std_dev = float('inf')
+
+                    # --- Scaling Factor R Deviation Check ---
+                    if num_teeth_found > 1:
+                        freq_ratios = sorted_freqs[1:] / sorted_freqs[:-1]
+                        # Filter out potential zero division issues if any freq is near zero
+                        valid_ratios = freq_ratios[np.isfinite(freq_ratios) & (freq_ratios > 0)]
+                        if len(valid_ratios) > 0:
+                            mean_R = np.mean(valid_ratios)
+                            R_dev = np.std(valid_ratios)
+                        else:
+                            mean_R = R_cand # Fallback if no valid ratios
+                            R_dev = float('inf')
+                    else:
+                        mean_R = R_cand
+                        R_dev = float('inf')
+
+
+                    # --- Score and Store ---
+                    # Score: weighted average of deviations (lower is better)
+                    # Give more weight to phase and R consistency
+                    current_score = 0.2 * amp_rel_std_dev + 0.4 * phase_step_std_dev + 0.4 * (R_dev / mean_R if mean_R > 0 else float('inf'))
+
+                    comb_detail = {
+                        'R_candidate': R_cand,
+                        'f0': f0,
+                        'num_teeth': num_teeth_found,
+                        'frequencies': sorted_freqs.tolist(),
+                        'amplitudes': comb_amplitudes.tolist(),
+                        'phases': comb_phases.tolist(),
+                        'phase_steps': phase_steps.tolist() if num_teeth_found > 1 else [],
+                        'freq_ratios': freq_ratios.tolist() if num_teeth_found > 1 else [],
+                        'mean_theta': mean_theta,
+                        'mean_R': mean_R,
+                        'amp_rel_std_dev': amp_rel_std_dev,
+                        'phase_step_std_dev': phase_step_std_dev,
+                        'R_dev': R_dev,
+                        'score': current_score
+                    }
+                    results[f'{basis}_log_comb_details'].append(comb_detail)
+
+                    # --- Update Best Log Comb ---
+                    if (amp_rel_std_dev < max_amp_rel_std_dev and
+                        phase_step_std_dev < max_phase_step_std_dev and
+                        (R_dev / mean_R if mean_R > 0 else float('inf')) < freq_ratio_tolerance * 2 and # Check R consistency relative to tolerance
+                        current_score < best_log_comb_score_found):
+
+                        best_log_comb_score_found = current_score
+                        results[f'{basis}_log_comb_found'] = True
+                        results[f'{basis}_best_R'] = mean_R # Store the measured mean R
+                        results[f'{basis}_log_mean_theta'] = mean_theta
+                        results[f'{basis}_log_amp_rel_std_dev'] = amp_rel_std_dev
+                        results[f'{basis}_log_phase_step_std_dev'] = phase_step_std_dev
+                        results[f'{basis}_log_best_comb_score'] = current_score
+                        results[f'{basis}_log_num_teeth'] = num_teeth_found
+                        results[f'{basis}_log_R_dev'] = R_dev
+                        results[f'{basis}_log_comb_freqs'] = sorted_freqs.tolist()
+
+        results[f'{basis}_log_comb_details'].sort(key=lambda x: x['score']) # Sort details by score
+
+    return results
+# <<< LOG COMB MODIFICATION END >>>
+
+
+# === Helper Functions (Potentially needed) ===
+
+def find_nearest_index(array, value):
+    """Finds the index of the element in array closest to value."""
+    idx = np.searchsorted(array, value, side="left")
+    if idx > 0 and (idx == len(array) or abs(value - array[idx-1]) < abs(value - array[idx])):
+        return idx-1
+    else:
+        return idx
+
+# === New Analysis Functions based on Penrose Median Definition ===
+
+def quantum_distance(psi1, psi2):
+    """
+    Calculates the quantum distance D_quant(psi1, psi2) = 1 - |<psi1|psi2>|^2.
+
+    Args:
+        psi1 (complex): Complex amplitude representing state psi1.
+        psi2 (complex): Complex amplitude representing state psi2.
+
+    Returns:
+        float: The calculated quantum distance.
+               Returns 1.0 if either input is zero or non-finite
+               to avoid division errors and handle edge cases.
+    """
+    # Basic check for non-finite values
+    if not (np.isfinite(psi1) and np.isfinite(psi2)):
+        return 1.0
+    # Treat complex amplitudes as unnormalized state vectors in 1D.
+    # The inner product <psi1|psi2> is psi1_conj * psi2.
+    inner_product = np.conjugate(psi1) * psi2
+    abs_inner_product_sq = np.abs(inner_product)**2
+
+    # Optional: Normalize within a local context if needed, e.g.,
+    # norm1_sq = np.abs(psi1)**2
+    # norm2_sq = np.abs(psi2)**2
+    # if norm1_sq > 1e-12 and norm2_sq > 1e-12:
+    #     abs_inner_product_sq /= (norm1_sq * norm2_sq)
+    # else:
+    #     return 1.0 # Distance is maximal if one state is zero
+
+    # Ensure the result is physically meaningful (between 0 and 1)
+    # Due to potential floating point inaccuracies.
+    dist = 1.0 - abs_inner_product_sq
+    return max(0.0, min(dist, 1.0)) # Clamp value between 0 and 1
+
+
+def calculate_quantum_geometric_median(freqs_window, psi_window):
+    """
+    Calculates the Quantum Geometric Median frequency within a window.
+
+    Args:
+        freqs_window (np.ndarray): Array of frequencies in the window T_k.
+        psi_window (np.ndarray): Array of complex spectral amplitudes
+                                  hat_psi(omega) corresponding to freqs_window.
+
+    Returns:
+        float: The frequency omega_k^med that minimizes the sum of quantum distances.
+               Returns None if the window is too small or contains non-finite values.
+    """
+    n_points = len(freqs_window)
+    if n_points < 2:
+        return freqs_window[0] if n_points == 1 else None # Median undefined for < 2 points
+
+    min_total_distance = float('inf')
+    median_freq_index = -1
+
+    # Check for non-finite values in the window amplitudes
+    if not np.all(np.isfinite(psi_window)):
+        print("Warning [calculate_quantum_geometric_median]: Non-finite values found in psi_window. Skipping median calculation for this window.")
+        # Optionally, return the frequency of the peak amplitude as a fallback
+        # peak_idx = np.argmax(np.abs(psi_window))
+        # return freqs_window[peak_idx]
+        return None
+
+
+    # Iterate through each point omega_i in the window as a potential median
+    for i in range(n_points):
+        current_total_distance = 0.0
+        # Calculate the sum of distances from omega_i to all other points omega_j
+        for j in range(n_points):
+            # if i == j: continue # Distance to self is 0
+            dist = quantum_distance(psi_window[i], psi_window[j])
+            current_total_distance += dist
+
+        # Update if this point has a smaller total distance
+        if current_total_distance < min_total_distance:
+            min_total_distance = current_total_distance
+            median_freq_index = i
+
+    if median_freq_index != -1:
+        return freqs_window[median_freq_index]
+    else:
+        # Fallback if calculation failed (e.g., all distances were inf)
+        print("Warning [calculate_quantum_geometric_median]: Could not determine median. Returning frequency of max amplitude.")
+        peak_idx = np.argmax(np.abs(psi_window))
+        return freqs_window[peak_idx]
+
+
+def penrose_kernel(omega, omega_k, params=None):
+    """
+    Placeholder for the complex-valued Penrose kernel K_k(omega).
+
+    Args:
+        omega (float): The frequency variable.
+        omega_k (float): The center frequency of the window T_k.
+        params (dict, optional): Additional parameters needed for the kernel.
+
+    Returns:
+        complex: The value of the kernel at omega.
+
+    *** CRITICAL: Replace this placeholder with the actual kernel definition! ***
+    """
+    # Example Placeholder 1: K_k(omega) = 1
+    # return 1.0 + 0.0j
+
+    # Example Placeholder 2: Simple phase factor
+    alpha = params.get('alpha', 0.1) if params else 0.1
+    return np.exp(1j * alpha * (omega - omega_k))
+
+    # Example Placeholder 3: Gaussian (real-valued example)
+    # sigma = params.get('sigma', omega_k * 0.1) if params else omega_k * 0.1 # Window dependent width
+    # return np.exp(-((omega - omega_k)**2) / (2 * sigma**2))
+
+
+def calculate_penrose_transform(freqs_window, psi_window, omega_k, kernel_params=None):
+    """
+    Calculates the Frequency-Domain Penrose Transform Psi_k over a window T_k.
+
+    Args:
+        freqs_window (np.ndarray): Array of frequencies in the window T_k.
+        psi_window (np.ndarray): Array of complex spectral amplitudes hat_psi(omega).
+        omega_k (float): The center frequency of the window T_k.
+        kernel_params (dict, optional): Parameters for the penrose_kernel function.
+
+    Returns:
+        complex: The calculated value of Psi_k.
+                 Returns 0+0j if calculation fails or window is empty.
+    """
+    n_points = len(freqs_window)
+    if n_points == 0:
+        return 0.0 + 0.0j
+
+    # Calculate the kernel values for each frequency in the window
+    kernel_values = np.array([penrose_kernel(om, omega_k, kernel_params) for om in freqs_window], dtype=complex)
+
+    # The integrand is K_k(omega) * hat_psi(omega)
+    integrand = kernel_values * psi_window
+
+    # Perform numerical integration (summation for discrete data)
+    # Using Simpson's rule if frequency points are evenly spaced, otherwise trapezoid or sum.
+    if n_points > 1:
+        # Check for even spacing (approximate)
+        diffs = np.diff(freqs_window)
+        if np.allclose(diffs, diffs[0]):
+             # Use Simpson's rule for better accuracy with smooth functions
+             # Requires an odd number of points, or handle even numbers.
+             # For simplicity, using trapezoidal rule which works for any number of points.
+             # psi_k = simps(integrand, freqs_window) # Scipy simps
+             psi_k = np.trapz(integrand, freqs_window) # Numpy trapz is simpler
+        else:
+            # Use trapezoidal rule if spacing is uneven
+            psi_k = np.trapz(integrand, freqs_window)
+    elif n_points == 1:
+         # If only one point, the integral is approximately the value * spacing (if known)
+         # For simplicity, just return the single integrand value
+         psi_k = integrand[0] # Or integrand[0] * delta_omega if resolution is known
+    else:
+        psi_k = 0.0 + 0.0j
+
+    return psi_k
+
+
+def calculate_penrose_median_representative(freqs_window, psi_window, psi_k):
+    """
+    Calculates the Penrose Median Representative frequency omega_k^PM within a window.
+
+    Args:
+        freqs_window (np.ndarray): Array of frequencies in the window T_k.
+        psi_window (np.ndarray): Array of complex spectral amplitudes hat_psi(omega).
+        psi_k (complex): The result of the Penrose Transform for this window.
+
+    Returns:
+        float: The frequency omega_k^PM that maximizes the overlap magnitude.
+               Returns None if calculation fails or window is empty.
+    """
+    n_points = len(freqs_window)
+    if n_points == 0 or not np.isfinite(psi_k):
+        return None
+
+    max_overlap_magnitude_sq = -1.0
+    pm_freq_index = -1
+
+    # Calculate overlap: <hat_psi(omega) | Psi_k> = conjugate(hat_psi(omega)) * Psi_k
+    # We want to maximize | <hat_psi(omega) | Psi_k> |
+    # This is equivalent to maximizing | <hat_psi(omega) | Psi_k> |^2
+
+    # Check for non-finite values in the window amplitudes
+    if not np.all(np.isfinite(psi_window)):
+        print("Warning [calculate_penrose_median_representative]: Non-finite values found in psi_window. Skipping PM calculation.")
+        # Optionally, return the frequency of the peak amplitude as a fallback
+        # peak_idx = np.argmax(np.abs(psi_window))
+        # return freqs_window[peak_idx]
+        return None
+
+    for i in range(n_points):
+        overlap = np.conjugate(psi_window[i]) * psi_k
+        overlap_magnitude_sq = np.abs(overlap)**2
+
+        if overlap_magnitude_sq > max_overlap_magnitude_sq:
+            max_overlap_magnitude_sq = overlap_magnitude_sq
+            pm_freq_index = i
+
+    if pm_freq_index != -1:
+        return freqs_window[pm_freq_index]
+    else:
+        # Fallback if calculation failed
+        print("Warning [calculate_penrose_median_representative]: Could not determine PM rep. Returning frequency of max amplitude.")
+        peak_idx = np.argmax(np.abs(psi_window))
+        return freqs_window[peak_idx]
+
+
+def analyze_comb_penrose_median(analysis,
+                                basis='mx', # 'mx' or 'mz'
+                                peak_height_threshold=0.1, # Min height for initial peak finding
+                                window_delta_factor=0.2, # Factor of Omega to determine window size Delta
+                                min_comb_teeth=3,
+                                kernel_params=None): # Parameters for the Penrose kernel
+    """
+    Analyzes FFT data for frequency combs using Quantum Geometric Median
+    and Penrose Median Representatives.
+
+    Args:
+        analysis (dict): The dictionary returned by analyze_time_crystal,
+                         containing FFT data ('positive_frequencies',
+                         'mx_fft_complex_pos', 'mz_fft_complex_pos', etc.).
+        basis (str): Which magnetization component to analyze ('mx' or 'mz').
+        peak_height_threshold (float): Minimum normalized amplitude for
+                                       initial peak detection.
+        window_delta_factor (float): Determines the window half-width Delta
+                                     as Delta = window_delta_factor * Omega.
+        min_comb_teeth (int): Minimum number of teeth required to identify a comb.
+        kernel_params (dict, optional): Parameters for the penrose_kernel function.
+
+    Returns:
+        dict: A dictionary containing the analysis results, including:
+              'penrose_comb_found' (bool): Whether a comb was found.
+              'penrose_omega' (float): Estimated comb spacing Omega.
+              'penrose_theta' (float): Estimated comb phase step theta.
+              'penrose_median_freqs' (list): Frequencies omega_k^PM.
+              'geometric_median_freqs' (list): Frequencies omega_k^med.
+              'initial_peak_freqs' (list): Frequencies of initially detected peaks.
+              'num_teeth' (int): Number of teeth found in the best comb.
+              'details' (list): Detailed results for each candidate comb.
+    """
+    results = {
+        f'{basis}_penrose_comb_found': False,
+        f'{basis}_penrose_omega': 0,
+        f'{basis}_penrose_theta': 0,
+        f'{basis}_penrose_median_freqs': [],
+        f'{basis}_geometric_median_freqs': [],
+        f'{basis}_initial_peak_freqs': [],
+        f'{basis}_num_teeth': 0,
+        f'{basis}_details': []
+    }
+
+    # --- Get necessary data from analysis dictionary ---
+    pos_freqs = analysis.get('positive_frequencies')
+    fft_complex_key = f'{basis}_fft_complex_pos'
+    fft_amp_key = f'{basis}_fft_pos' # Normalized amplitude for peak finding
+    fft_complex = analysis.get(fft_complex_key)
+    fft_amp = analysis.get(fft_amp_key)
+
+    if pos_freqs is None or fft_complex is None or fft_amp is None or pos_freqs.size == 0:
+        print(f"Warning [analyze_comb_penrose_median]: Missing FFT data for basis {basis}.")
+        return results
+
+    # --- Step 1: Find initial significant peaks (similar to old method) ---
+    try:
+        fft_len = len(pos_freqs)
+        # Adjust distance based on FFT length for robustness
+        distance = max(3, int(fft_len / 200))
+        initial_peak_indices = signal.find_peaks(fft_amp, height=peak_height_threshold, distance=distance)[0]
+    except Exception as e:
+        print(f"Warning [analyze_comb_penrose_median]: Error finding initial peaks for basis {basis}: {e}")
+        return results
+
+    if initial_peak_indices.size < min_comb_teeth:
+        # print(f"Info [analyze_comb_penrose_median]: Not enough initial peaks ({initial_peak_indices.size}) found for basis {basis}.")
+        return results
+
+    initial_peak_freqs = pos_freqs[initial_peak_indices]
+    initial_peak_amps = fft_amp[initial_peak_indices]
+    # Sort peaks by frequency for easier processing
+    sort_order = np.argsort(initial_peak_freqs)
+    initial_peak_indices = initial_peak_indices[sort_order]
+    initial_peak_freqs = initial_peak_freqs[sort_order]
+    initial_peak_amps = initial_peak_amps[sort_order]
+
+    # --- Step 2: Estimate Omega from initial peaks ---
+    # Use differences between adjacent significant peaks as candidates for Omega
+    if len(initial_peak_freqs) > 1:
+        freq_diffs = np.diff(initial_peak_freqs)
+        # Could use median or mean of diffs, or test multiple candidates
+        # Let's use the median difference as the primary candidate Omega
+        omega_cand = np.median(freq_diffs)
+        if omega_cand <= 0:
+             print(f"Warning [analyze_comb_penrose_median]: Invalid Omega candidate ({omega_cand:.3f}) for basis {basis}.")
+             return results
+    else:
+        return results # Cannot estimate Omega from a single peak
+
+    # --- Step 3: Identify comb teeth based on candidate Omega ---
+    # Find the strongest peak and try to build a comb around it
+    strongest_peak_idx_in_sorted = np.argmax(initial_peak_amps)
+    f0_cand = initial_peak_freqs[strongest_peak_idx_in_sorted]
+    omega_tolerance = omega_cand * 0.2 # Tolerance for matching peaks to expected comb frequencies
+
+    comb_indices_initial = [initial_peak_indices[strongest_peak_idx_in_sorted]]
+    comb_freqs_initial = [f0_cand]
+
+    # Search forwards
+    current_f = f0_cand
+    for n in range(1, len(initial_peak_freqs)):
+        target_f = current_f + omega_cand
+        best_match_idx = -1
+        min_diff = omega_tolerance
+        # Find the closest initial peak to the target frequency
+        for pk_idx, pk_f in enumerate(initial_peak_freqs):
+            diff = abs(pk_f - target_f)
+            if diff < min_diff and initial_peak_indices[pk_idx] not in comb_indices_initial:
+                min_diff = diff
+                best_match_idx = pk_idx
+        if best_match_idx != -1:
+            actual_peak_index = initial_peak_indices[best_match_idx]
+            comb_indices_initial.append(actual_peak_index)
+            comb_freqs_initial.append(initial_peak_freqs[best_match_idx])
+            current_f = initial_peak_freqs[best_match_idx] # Update for next search step
+        else:
+            pass # Stop searching in this direction if no peak found
+
+    # Search backwards
+    current_f = f0_cand
+    for n in range(1, len(initial_peak_freqs)):
+        target_f = current_f - omega_cand
+        if target_f < 0: break # Stop if frequency goes below zero
+        best_match_idx = -1
+        min_diff = omega_tolerance
+        for pk_idx, pk_f in enumerate(initial_peak_freqs):
+            diff = abs(pk_f - target_f)
+            if diff < min_diff and initial_peak_indices[pk_idx] not in comb_indices_initial:
+                min_diff = diff
+                best_match_idx = pk_idx
+        if best_match_idx != -1:
+            actual_peak_index = initial_peak_indices[best_match_idx]
+            comb_indices_initial.append(actual_peak_index)
+            comb_freqs_initial.append(initial_peak_freqs[best_match_idx])
+            current_f = initial_peak_freqs[best_match_idx]
+        else:
+            pass # Stop searching backwards
+
+    # --- Step 4: Refine Omega and Check Comb Size ---
+    if len(comb_freqs_initial) >= min_comb_teeth:
+        # Sort the found comb frequencies
+        comb_freqs_initial = sorted(comb_freqs_initial)
+        # Recalculate Omega based on the found comb teeth
+        if len(comb_freqs_initial) > 1:
+            refined_omega = np.mean(np.diff(comb_freqs_initial))
+        else:
+            refined_omega = omega_cand # Fallback
+
+        if refined_omega <= 0:
+             print(f"Warning [analyze_comb_penrose_median]: Invalid refined Omega ({refined_omega:.3f}) for basis {basis}.")
+             return results # Cannot proceed
+
+        # --- Step 5: Calculate Medians for each tooth in the identified comb ---
+        penrose_median_freqs = []
+        geometric_median_freqs = []
+        comb_phases = []
+        comb_complex_values_at_pm = [] # Store complex value at PM freq
+
+        window_delta = refined_omega * window_delta_factor
+        if window_delta <= 0:
+             # Ensure delta is at least the frequency resolution if factor is too small
+             if len(pos_freqs) > 1:
+                 min_delta = pos_freqs[1]-pos_freqs[0]
+                 window_delta = max(min_delta, refined_omega * 0.01) # Use 1% if factor is zero/neg
+             else:
+                 window_delta = refined_omega * 0.1 # Fallback delta
+
+
+        print(f"Info [analyze_comb_penrose_median]: Basis={basis}, Refined Omega={refined_omega:.4f}, Num Initial Teeth={len(comb_freqs_initial)}, Window Delta={window_delta:.4f}")
+
+        for k, omega_k_initial in enumerate(comb_freqs_initial):
+            # Define the window T_k around the initial peak frequency
+            omega_min = omega_k_initial - window_delta
+            omega_max = omega_k_initial + window_delta
+
+            # Find indices corresponding to this frequency window
+            indices_in_window = np.where((pos_freqs >= omega_min) & (pos_freqs <= omega_max))[0]
+
+            if len(indices_in_window) == 0:
+                print(f"  Warning: No frequency points found in window k={k} around {omega_k_initial:.4f}")
+                # As a fallback, maybe just use the initial peak?
+                # geometric_median_freqs.append(omega_k_initial)
+                # penrose_median_freqs.append(omega_k_initial)
+                # comb_phases.append(np.angle(fft_complex[find_nearest_index(pos_freqs, omega_k_initial)]))
+                continue # Skip this tooth if window is empty
+
+            freqs_window = pos_freqs[indices_in_window]
+            psi_window = fft_complex[indices_in_window]
+
+            # Calculate Quantum Geometric Median
+            omega_k_med = calculate_quantum_geometric_median(freqs_window, psi_window)
+            if omega_k_med is not None:
+                geometric_median_freqs.append(omega_k_med)
+            else:
+                 # Fallback if median calculation failed
+                 geometric_median_freqs.append(omega_k_initial)
+
+
+            # Calculate Penrose Transform Psi_k
+            # *** Uses placeholder kernel ***
+            psi_k = calculate_penrose_transform(freqs_window, psi_window, omega_k_initial, kernel_params)
+
+            # Calculate Penrose Median Representative omega_k^PM
+            omega_k_pm = calculate_penrose_median_representative(freqs_window, psi_window, psi_k)
+            if omega_k_pm is not None:
+                penrose_median_freqs.append(omega_k_pm)
+                # Find the complex value at the PM frequency
+                pm_index = find_nearest_index(pos_freqs, omega_k_pm)
+                # Check if the index is valid and corresponds to the found frequency
+                if pm_index < len(pos_freqs) and np.isclose(pos_freqs[pm_index], omega_k_pm):
+                     complex_val_at_pm = fft_complex[pm_index]
+                     comb_phases.append(np.angle(complex_val_at_pm))
+                     comb_complex_values_at_pm.append(complex_val_at_pm)
+                else:
+                    # Fallback if index is bad
+                    print(f"  Warning: Could not find exact complex value for PM freq {omega_k_pm:.4f}. Using initial peak value.")
+                    initial_idx = find_nearest_index(pos_freqs, omega_k_initial)
+                    comb_phases.append(np.angle(fft_complex[initial_idx]))
+                    comb_complex_values_at_pm.append(fft_complex[initial_idx])
+
+            else:
+                 # Fallback if PM calculation failed
+                 penrose_median_freqs.append(omega_k_initial)
+                 initial_idx = find_nearest_index(pos_freqs, omega_k_initial)
+                 comb_phases.append(np.angle(fft_complex[initial_idx]))
+                 comb_complex_values_at_pm.append(fft_complex[initial_idx])
+
+
+        # --- Step 6: Analyze the resulting Penrose Median comb ---
+        num_teeth_found = len(penrose_median_freqs)
+        if num_teeth_found >= min_comb_teeth:
+            # Calculate final Omega and Theta from the PM frequencies
+            final_omega = np.mean(np.diff(penrose_median_freqs)) if num_teeth_found > 1 else 0
+            # Calculate phase steps (handle wrapping)
+            if num_teeth_found > 1:
+                unwrapped_phases = np.unwrap(comb_phases)
+                phase_steps = np.diff(unwrapped_phases)
+                final_theta = np.mean(phase_steps)
+                phase_step_std_dev = np.std(phase_steps)
+            else:
+                final_theta = 0
+                phase_step_std_dev = float('inf')
+
+            # Store results
+            results[f'{basis}_penrose_comb_found'] = True
+            results[f'{basis}_penrose_omega'] = final_omega
+            results[f'{basis}_penrose_theta'] = final_theta
+            results[f'{basis}_penrose_median_freqs'] = penrose_median_freqs
+            results[f'{basis}_geometric_median_freqs'] = geometric_median_freqs
+            results[f'{basis}_initial_peak_freqs'] = comb_freqs_initial # Store the initial peaks that formed the comb
+            results[f'{basis}_num_teeth'] = num_teeth_found
+            # Add details (can be expanded)
+            detail = {
+                'initial_omega_cand': omega_cand,
+                'refined_omega': refined_omega,
+                'final_penrose_omega': final_omega,
+                'final_penrose_theta': final_theta,
+                'num_teeth': num_teeth_found,
+                'phase_step_std_dev': phase_step_std_dev,
+                'penrose_median_freqs': penrose_median_freqs,
+                'geometric_median_freqs': geometric_median_freqs,
+                'initial_peak_freqs': comb_freqs_initial,
+                'complex_values_at_pm': comb_complex_values_at_pm,
+                'phases_at_pm': comb_phases,
+                'window_delta': window_delta,
+            }
+            results[f'{basis}_details'].append(detail)
+            print(f"Info [analyze_comb_penrose_median]: Penrose Comb FOUND for basis {basis}. Omega={final_omega:.4f}, Theta={final_theta:.4f}, Teeth={num_teeth_found}")
+
+        else:
+             print(f"Info [analyze_comb_penrose_median]: Not enough Penrose Median teeth ({num_teeth_found}) found for basis {basis}.")
+
+    else:
+         print(f"Info [analyze_comb_penrose_median]: Initial comb search failed for basis {basis} (found {len(comb_freqs_initial)} peaks).")
+
+
+    return results
+
+
+# === Quantum Circuit Simulator Class ===
+
+class QuantumCircuitSimulator:
+    """
+    Simulator for quantum circuits, potentially exhibiting Time Crystal
+    and Frequency Crystal phenomena. Allows selection of circuit type.
+    """
+
+    def __init__(self, num_qubits=10, num_shots=1024, J=1.2, h0=0.15, h1=0.9,
+                 omega_ratio=0.38, spatial_mod=0.7, mod_period=3,
+                 wavelet_type='cmor1.5-1.0',
+                 static_bias_strength=0.0,
+                 circuit_type='graphene_fc', # Default circuit changed to GFC
+                 # GFC / Comb parameters
+                 interaction_angle=np.pi/4,
+                 chirality_angle=0.0,
+                 symmetry_breaking_strength=0.0,
+                 # Twistor parameters
+                 twistor_angle=np.pi/6,
+                 # *** NEW GFC Parameters ***
+                 three_body_interaction_angle=0.0, # Strength for 3-qubit gates
+                 symmetry_pattern_type='sinusoidal', # 'sinusoidal', 'piecewise', etc.
+                 chirality_modulation_strength=0.0 # Strength of NNN modulation
+                 ):
+        """
+        Initialize the simulator with specified parameters.
+        (Parameters documentation unchanged)
+        """
+        self.num_qubits = num_qubits
+        self.num_shots = num_shots
+        self.circuit = None
+        if AerSimulator is None: raise RuntimeError("AerSimulator not available.")
+        self.simulator = AerSimulator()
+        self.phi = Parameter('φ') # Driving parameter
+
+        # Store parameters
+        self.J = J; self.h0 = h0; self.h1 = h1; self.omega_ratio = omega_ratio
+        self.spatial_mod = spatial_mod; self.mod_period = mod_period
+        self.wavelet_type = wavelet_type
+        self.static_bias_strength = static_bias_strength
+        self.circuit_type = circuit_type
+        self.interaction_angle = interaction_angle
+        self.twistor_angle = twistor_angle
+        self.chirality_angle = chirality_angle
+        self.symmetry_breaking_strength = symmetry_breaking_strength
+        # Store new parameters
+        self.three_body_interaction_angle = three_body_interaction_angle
+        self.symmetry_pattern_type = symmetry_pattern_type
+        self.chirality_modulation_strength = chirality_modulation_strength
+
+        # Create the circuit upon initialization
+        self.create_circuit()
+
+
+    def create_circuit(self):
+        """Creates the quantum circuit based on the specified circuit_type."""
+        # (Implementation unchanged)
+        if self.circuit_type == 'penrose':
+            print("Creating Penrose-Twistor inspired circuit...")
+            self.circuit = self._create_penrose_circuit()
+        elif self.circuit_type == 'qft_basic':
+            print("Creating Basic QFT-based circuit...")
+            self.circuit = self._create_qft_basic_circuit()
+        elif self.circuit_type == 'comb_generator':
+            print("Creating Driven Interacting Chain (Comb Generator) circuit...")
+            self.circuit = self._create_comb_generator_circuit()
+        elif self.circuit_type == 'comb_twistor':
+            print("Creating Comb Generator + Twistor Elements circuit...")
+            self.circuit = self._create_comb_twistor_circuit()
+        elif self.circuit_type == 'graphene_fc': # ADDED condition
+            # self._create_graphene_fc_circuit is defined below
+            self.circuit = self._create_graphene_fc_circuit() # Call the new method
+        else:
+            raise ValueError(f"Unknown circuit type: {self.circuit_type}. Choose 'penrose', 'qft_basic', 'comb_generator', 'comb_twistor', or 'graphene_fc'.") # UPDATED error message
+        return self.circuit
+
+    # --- Penrose-Twistor Circuit ---
+    def _create_penrose_circuit(self):
+        """(Implementation unchanged - details omitted for brevity)"""
+        qc = QuantumCircuit(self.num_qubits, name="PenroseTwistor");
+        # ... (Full implementation as before) ...
+        for i in range(self.num_qubits): qc.ry(np.pi/2 * (1.0 + self.spatial_mod * np.sin(2 * np.pi * i / self.mod_period)), i); qc.barrier()
+        for i in range(self.num_qubits-1): qc.cx(i, i+1); qc.rz(self.J * (1.0 + 0.3 * np.cos(2 * np.pi * i / self.mod_period)) * np.pi/2, i+1); qc.cx(i, i+1)
+        for i in range(0, self.num_qubits-3, 3): qc.cx(i, i+3); qc.rz(self.J * 0.4 * np.pi/2, i+3); qc.cx(i, i+3); qc.barrier()
+        for i in range(self.num_qubits): qc.rx(np.pi/4 * (1.0 + 0.2 * np.sin(2 * np.pi * i / self.mod_period)), i); qc.barrier()
+        for i in range(0, self.num_qubits-2, 2): qc.cx(i, i+1);
+        if i+2 < self.num_qubits: qc.cx(i, i+2); qc.ry(np.pi/4, i+1); qc.barrier()
+        for i in range(self.num_qubits): qc.rz(self.phi * (1.0 + 0.3 * np.cos(2 * np.pi * i / self.mod_period)), i)
+        for i in range(self.num_qubits): qc.rx(self.phi/2 * (1.0 + 0.25 * np.sin(4 * np.pi * i / self.mod_period)), i); qc.barrier()
+        if self.static_bias_strength != 0: bias_period = self.num_qubits / 2.0 if self.num_qubits > 0 else 1.0;
+        for i in range(self.num_qubits): qc.rz(self.static_bias_strength * np.sin(2 * np.pi * i / bias_period), i); qc.barrier()
+        for i in range(0, self.num_qubits-1): qc.cx(i, i+1); qc.rz(np.pi/2, i+1); qc.cx(i, i+1); qc.barrier()
+        for i in range(0, self.num_qubits-1, 2): qc.swap(i, i+1)
+        if self.num_qubits >= 6:
+            for i in range(0, self.num_qubits-3, 3): qc.swap(i, i+3); qc.barrier()
+        self._apply_singularity_detection_oracle(qc); qc.barrier()
+        qft_gate = QFT(self.num_qubits, approximation_degree=max(0, self.num_qubits - 7)); qc.compose(qft_gate, inplace=True)
+        return qc
+
+    def _apply_singularity_detection_oracle(self, qc):
+        """(Implementation unchanged - details omitted for brevity)"""
+        for i in range(1, self.num_qubits-1): qc.cx(i-1, i); qc.cx(i+1, i); qc.rz(np.pi/4, i); qc.cx(i+1, i); qc.cx(i-1, i)
+        for i in range(2, self.num_qubits-2): qc.cx(i-2, i); qc.cx(i-1, i); qc.cx(i+1, i); qc.rz(np.pi/6, i); qc.cx(i+1, i); qc.cx(i-1, i); qc.cx(i-2, i)
+
+    # --- QFT Basic Circuit ---
+    def _create_qft_basic_circuit(self):
+        """(Implementation unchanged - details omitted for brevity)"""
+        qc = QuantumCircuit(self.num_qubits, name="QFTBasic"); qc.h(range(self.num_qubits)); qc.barrier()
+        for i in range(self.num_qubits - 1): qc.cz(i, i + 1); qc.barrier()
+        qc.rz(self.phi, range(self.num_qubits)); qc.rx(self.phi / 2.0, range(self.num_qubits)); qc.barrier()
+        if self.static_bias_strength != 0: bias_period = self.num_qubits / 2.0 if self.num_qubits > 0 else 1.0;
+        for i in range(self.num_qubits): qc.rz(self.static_bias_strength * np.sin(2 * np.pi * i / bias_period), i); qc.barrier()
+        qft_gate = QFT(self.num_qubits, approximation_degree=max(0, self.num_qubits - 7), do_swaps=False); qc.compose(qft_gate, inplace=True); qc.barrier()
+        return qc
+
+    # --- Comb Generator Circuit ---
+    def _create_comb_generator_circuit(self):
+        """Creates a circuit with interactions and driving."""
+        # (Implementation unchanged - details omitted for brevity)
+        qc = QuantumCircuit(self.num_qubits, name="CombGenerator"); qc.h(range(self.num_qubits)); qc.barrier()
+        # Interaction
+        for i in range(self.num_qubits - 1): qc.cp(self.interaction_angle, i, i + 1);
+        qc.barrier()
+        qc.rz(self.phi, range(self.num_qubits))
+        qc.rx(self.phi / 2.0, range(self.num_qubits))
+        qc.barrier()
+        if self.static_bias_strength != 0:
+             bias_period = self.num_qubits / 2.0 if self.num_qubits > 0 else 1.0;
+             for i in range(self.num_qubits): qc.rz(self.static_bias_strength * np.sin(2 * np.pi * i / bias_period), i);
+             qc.barrier()
+        return qc
+
+    # --- Comb Twistor Circuit ---
+    def _create_comb_twistor_circuit(self):
+        """
+        Combines comb_generator elements with Twistor-inspired rotations/chirality.
+        (Implementation unchanged - details omitted for brevity)
+        """
+        qc = QuantumCircuit(self.num_qubits, name="CombTwistor")
+        # 1. Initialization
+        qc.h(range(self.num_qubits)); qc.barrier()
+        # 2. Interaction Block (NN)
+        for i in range(self.num_qubits - 1): qc.cp(self.interaction_angle, i, i + 1)
+        qc.barrier()
+        # 3. "Twistor Rotation" Block
+        for i in range(self.num_qubits):
+            mod_factor = 1.0 + 0.2 * np.sin(2 * np.pi * i / self.mod_period)
+            qc.rx(self.twistor_angle * mod_factor, i)
+        qc.barrier()
+        # 4. "Chirality" Block (NNN)
+        if self.num_qubits > 2 and self.chirality_angle != 0: # Check if applicable
+            for i in range(self.num_qubits - 2): qc.rzz(self.chirality_angle, i, i + 2)
+            qc.barrier()
+        # 5. Floquet Cycle (Driving + Bias)
+        qc.rz(self.phi, range(self.num_qubits)); qc.rx(self.phi / 2.0, range(self.num_qubits)); qc.barrier()
+        if self.static_bias_strength != 0:
+            bias_period = self.num_qubits / 2.0 if self.num_qubits > 0 else 1.0
+            for i in range(self.num_qubits):
+                bias_angle = self.static_bias_strength * np.sin(2 * np.pi * i / bias_period)
+                qc.rz(bias_angle, i)
+            qc.barrier()
+        return qc
+
+    # --- Graphene Frequency Crystal Circuit (MODIFIED) ---
+    def _create_graphene_fc_circuit(self):
+        """
+        Creates the 'Graphene Frequency Crystal' (GFC) circuit.
+        MODIFIED: Includes 3-body interactions, complex symmetry breaking,
+                  and modulated NNN interactions.
+        (Implementation unchanged)
+        """
+        print("Creating Modified Graphene Frequency Crystal (GFC) circuit...")
+        qc = QuantumCircuit(self.num_qubits, name="GrapheneFC_Mod")
+
+        # 1. Initialization: Superposition state (standard)
+        qc.h(range(self.num_qubits))
+        qc.barrier()
+
+        # 2. Nearest-Neighbor Interaction Block (from CombGenerator)
+        # Uses Controlled-Phase gates (CP).
+        for i in range(self.num_qubits - 1):
+            qc.cp(self.interaction_angle, i, i + 1)
+        qc.barrier()
+
+        # 3. Next-Nearest-Neighbor "Phason/Interlayer" Interaction Block (MODIFIED)
+        # Uses RZZ gates, controlled by chirality_angle.
+        # Added position-based modulation.
+        if self.num_qubits > 2 and self.chirality_angle != 0:
+            print("  Applying NNN RZZ interactions (modulated)...")
+            for i in range(self.num_qubits - 2):
+                 # Modulate the angle based on position (example: linear ramp)
+                 modulation_factor = 1.0 + self.chirality_modulation_strength * (i / (self.num_qubits - 3)) if self.num_qubits > 3 else 1.0
+                 modulated_chirality_angle = self.chirality_angle * modulation_factor
+                 qc.rzz(modulated_chirality_angle, i, i + 2)
+            qc.barrier()
+
+        # 3.5. Three-Body Interaction Block (NEW)
+        # Uses a decomposition of controlled-controlled-phase.
+        if self.num_qubits > 2 and self.three_body_interaction_angle != 0:
+            print("  Applying 3-body interactions...")
+            for i in range(self.num_qubits - 2):
+                # Implementing CCPhase(theta) using CX and single-qubit Rz gates
+                # Based on decomposition: CCPhase(theta) = CPhase(theta/2)[ctrl1, target] CPhase(theta/2)[ctrl2, target] CPhase(-theta/2)[ctrl1, ctrl2]
+                # This decomposition requires controlled-phase gates. A simpler approach using Toffoli:
+                theta = self.three_body_interaction_angle
+                qc.cp(theta / 2, i + 1, i + 2)
+                qc.cx(i, i + 1)
+                qc.cp(-theta / 2, i + 1, i + 2)
+                qc.cx(i, i + 1)
+                qc.cp(theta / 2, i, i + 2)
+                # Note: This is one possible decomposition, others exist.
+                # For simplicity, we use multiple CP gates.
+            qc.barrier()
+
+        # 4. Symmetry Breaking Block (MODIFIED)
+        # Uses Rz gates with spatially varying angle based on pattern type.
+        if self.symmetry_breaking_strength != 0:
+            print(f"  Applying symmetry breaking (type: {self.symmetry_pattern_type})...")
+            if self.symmetry_pattern_type == 'sinusoidal':
+                symmetry_period = self.num_qubits / 2.0 if self.num_qubits > 1 else 1.0
+                for i in range(self.num_qubits):
+                    symmetry_angle = self.symmetry_breaking_strength * np.sin(2 * np.pi * i / symmetry_period)
+                    qc.rz(symmetry_angle, i)
+            elif self.symmetry_pattern_type == 'piecewise':
+                # Example: Different strength for first/second half
+                midpoint = self.num_qubits // 2
+                for i in range(self.num_qubits):
+                    strength_factor = 1.0 if i < midpoint else 0.5 # Example factors
+                    symmetry_angle = self.symmetry_breaking_strength * strength_factor
+                    qc.rz(symmetry_angle, i)
+            # Add more pattern types here (e.g., 'linear', 'random', 'nested')
+            else: # Default to sinusoidal if type unknown
+                print(f"  Warning: Unknown symmetry_pattern_type '{self.symmetry_pattern_type}'. Defaulting to sinusoidal.")
+                symmetry_period = self.num_qubits / 2.0 if self.num_qubits > 1 else 1.0
+                for i in range(self.num_qubits):
+                    symmetry_angle = self.symmetry_breaking_strength * np.sin(2 * np.pi * i / symmetry_period)
+                    qc.rz(symmetry_angle, i)
+            qc.barrier()
+
+        # 5. Floquet Drive Block (Standard)
+        # Uses Rz and Rx gates parameterized by 'phi'.
+        qc.rz(self.phi, range(self.num_qubits))
+        qc.rx(self.phi / 2.0, range(self.num_qubits))
+        qc.barrier()
+
+        # 6. Static Bias Block (Optional, standard)
+        if self.static_bias_strength != 0:
+            bias_period = self.num_qubits / 2.0 if self.num_qubits > 0 else 1.0
+            for i in range(self.num_qubits):
+                bias_angle = self.static_bias_strength * np.sin(2 * np.pi * i / bias_period)
+                qc.rz(bias_angle, i)
+            qc.barrier()
+
+        return qc
+
+    # --- run_time_evolution method ---
+    def run_time_evolution(self, num_steps=500, time_step=0.1):
+        """(Implementation unchanged - details omitted for brevity)"""
+        if self.circuit is None: print("Error: Circuit not created."); return None
+        results = {'times': [], 'x_magnetization': [], 'z_magnetization': [], 'entropy': [], 'wavelet_coeffs': [], 'spatial_patterns': []}
+        # Determine method based on qubit count (Statevector for small systems)
+        statevector_method = self.num_qubits <= 8 # Threshold for using statevector
+        print(f"Starting time evolution: Circuit='{self.circuit.name}', {num_steps} steps, dt={time_step}, Method={'Statevector' if statevector_method else 'AerSimulator Shots'}")
+        for t in range(num_steps):
+            time = t * time_step; results['times'].append(time)
+            # Calculate the driving phase for this time step
+            phi_val = self.h1 * (2 * np.pi * self.omega_ratio * time)
+            # Assign the parameter value to the circuit
+            bound_circuit = self.circuit.assign_parameters({self.phi: phi_val})
+            # Calculate observables using the appropriate method
+            if statevector_method:
+                try:
+                    statevector = Statevector.from_instruction(bound_circuit)
+                    # Define Pauli operators for expectation values
+                    x_op = np.array([[0, 1], [1, 0]]); z_op = np.array([[1, 0], [0, -1]])
+                    # Calculate expectation values per qubit
+                    x_mag_per_qubit = [statevector.expectation_value(x_op, [q]).real for q in range(self.num_qubits)]
+                    z_mag_per_qubit = [statevector.expectation_value(z_op, [q]).real for q in range(self.num_qubits)]
+                    # Calculate mean magnetization
+                    mx = np.mean(x_mag_per_qubit); mz = np.mean(z_mag_per_qubit)
+                    # Calculate entropy
+                    probabilities = statevector.probabilities(); non_zero_probs = probabilities[probabilities > 0]
+                    entropy = -np.sum(non_zero_probs * np.log2(non_zero_probs)) if non_zero_probs.size > 0 else 0
+                except Exception as e: print(f"ERROR Statevector step {t}: {e}"); mx, mz, entropy = 0, 0, 0; x_mag_per_qubit = [0]*self.num_qubits; z_mag_per_qubit = [0]*self.num_qubits
+            else: # Shots-based simulation for larger systems
+                try:
+                    measure_circuit = bound_circuit.copy(); measure_circuit.measure_all()
+                    transpiled_circuit = transpile(measure_circuit, self.simulator)
+                    job = self.simulator.run(transpiled_circuit, shots=self.num_shots, coupling_map=None) # No coupling map
+                    counts = job.result().get_counts()
+                    mx_total, mz_total, entropy = 0, 0, 0; x_mag_per_qubit = [0]*self.num_qubits; z_mag_per_qubit = [0]*self.num_qubits
+                    for bitstring, count in counts.items():
+                        prob = count / self.num_shots; x_contrib, z_contrib = 0, 0
+                        for q, bit in enumerate(bitstring[::-1]): # Qiskit bit order is reversed
+                            z_val = (1 if bit == '0' else -1) * prob # Z expectation value
+                            x_val = (random.random() * 2 - 1) * prob # Simple X estimate (not rigorous)
+                            x_contrib += x_val; z_contrib += z_val; x_mag_per_qubit[q] += x_val; z_mag_per_qubit[q] += z_val
+                        mx_total += x_contrib; mz_total += z_contrib
+                        if prob > 0: entropy -= prob * np.log2(prob) # Accumulate entropy
+                    mx = mx_total / self.num_qubits; mz = mz_total / self.num_qubits # Average magnetization
+                except Exception as e: print(f"ERROR AerSimulator step {t}: {e}"); traceback.print_exc(); mx, mz, entropy = 0, 0, 0; x_mag_per_qubit = [0]*self.num_qubits; z_mag_per_qubit = [0]*self.num_qubits
+            # Store results for this time step
+            results['spatial_patterns'].append({'x': x_mag_per_qubit, 'z': z_mag_per_qubit})
+            results['x_magnetization'].append(mx); results['z_magnetization'].append(mz); results['entropy'].append(entropy)
+            # Perform wavelet transform (if applicable)
+            try: results['wavelet_coeffs'].append(self._wavelet_penrose_transform(np.array([mx, mz]), wavelet=self.wavelet_type))
+            except Exception: results['wavelet_coeffs'].append(np.array([])) # Handle errors gracefully
+            if (t + 1) % 100 == 0: print(f"  Step {t+1}/{num_steps} complete.")
+        print("Time evolution finished."); return results
+
+    # --- _wavelet_penrose_transform method ---
+    def _wavelet_penrose_transform(self, data, wavelet='cmor1.5-1.0', scales=None):
+        """Performs Continuous Wavelet Transform."""
+        # (Implementation unchanged)
+        if scales is None: scales = np.logspace(0, 1.2, 20)
+        if data is None or data.size == 0 or np.all(data==0): return np.array([])
+        try: coeffs, freqs = pywt.cwt(data, scales, wavelet); return coeffs
+        except Exception as e: print(f"ERROR during CWT: {e}"); return np.array([])
+
+    # --- analyze_time_crystal method ---
+    def analyze_time_crystal(self, results, threshold=0.04, transient_fraction=0.2):
+        """
+        Analyze results for time crystal signatures (subharmonics in FFT),
+        discarding initial transients. Returns complex FFT data.
+        (Implementation unchanged - details omitted for brevity)
+        """
+        times = np.array(results['times']); mx = np.array(results['x_magnetization']); mz = np.array(results['z_magnetization'])
+        num_points = len(times); start_index = int(num_points * transient_fraction)
+        min_fft_points = 50 # Ensure enough points for FFT
+        if start_index >= num_points - min_fft_points: start_index = 0 # Use all points if transient is too large
+        times_stable = times[start_index:]; mx_stable = mx[start_index:]; mz_stable = mz[start_index:]
+        # Default empty analysis result
+        empty_analysis = { 'drive_frequency': 0, 'drive_period': float('inf'), 'expected_subharmonics': [], 'mx_time_crystal_strength': 0, 'mx_time_crystal_frequency': 0, 'mx_time_crystal_period': 0, 'mx_time_crystal_ratio': 0, 'mx_exact_subharmonic': False, 'mx_closest_n': 0, 'mx_significant_frequencies': [], 'mz_time_crystal_strength': 0, 'mz_time_crystal_frequency': 0, 'mz_time_crystal_period': 0, 'mz_time_crystal_ratio': 0, 'mz_exact_subharmonic': False, 'mz_closest_n': 0, 'mz_significant_frequencies': [], 'frequency_crystal_detected': 0.0, 'frequency_crystal_frequencies': [], 'frequencies': np.array([]), 'positive_frequencies': np.array([]), 'mx_fft_power': np.array([]), 'mz_fft_power': np.array([]), 'mx_fft_pos': np.array([]), 'mz_fft_pos': np.array([]), 'mx_fft_complex_pos': np.array([]), 'mz_fft_complex_pos': np.array([]), 'mx_peaks_indices': np.array([]), 'mz_peaks_indices': np.array([]) }
+        if len(times_stable) < 2: return empty_analysis # Need at least 2 points for FFT
+        # Calculate time step and drive frequency
+        dt = (results['times'][1] - results['times'][0]) if len(results['times']) > 1 else 0
+        if dt <= 0:
+             if len(times_stable) > 1: dt = times_stable[1] - times_stable[0] # Try stable times if initial dt failed
+             if dt <= 0: return empty_analysis # Cannot proceed without valid dt
+        drive_freq = self.omega_ratio / dt; drive_period = 1 / drive_freq if drive_freq > 0 else float('inf')
+        # Perform FFT
+        fft_len = len(mx_stable); window = signal.windows.blackman(fft_len); mx_windowed = mx_stable * window; mz_windowed = mz_stable * window; n_fft = fft_len # Use actual length for FFT
+        mx_fft_full = np.fft.fft(mx_windowed, n=n_fft); mz_fft_full = np.fft.fft(mz_windowed, n=n_fft); mx_fft_power = np.abs(mx_fft_full); mz_fft_power = np.abs(mz_fft_full)
+        # Normalize FFT power (excluding DC component)
+        max_mx_power = np.max(mx_fft_power[1:]) if fft_len > 1 else np.max(mx_fft_power); max_mz_power = np.max(mz_fft_power[1:]) if fft_len > 1 else np.max(mz_fft_power)
+        mx_fft_norm = mx_fft_power / max_mx_power if max_mx_power > 0 else mx_fft_power; mz_fft_norm = mz_fft_power / max_mz_power if max_mz_power > 0 else mz_fft_power
+        # Get positive frequencies
+        freqs = np.fft.fftfreq(n_fft, dt); positive_idx = freqs > 0; pos_freqs = freqs[positive_idx]
+        if pos_freqs.size == 0: analysis_result = empty_analysis.copy(); analysis_result.update({'drive_frequency': drive_freq, 'drive_period': drive_period}); return analysis_result
+        # Extract positive frequency components (amplitude and complex)
+        mx_fft_pos_amp = mx_fft_norm[positive_idx]; mz_fft_pos_amp = mz_fft_norm[positive_idx]; mx_fft_complex_pos = mx_fft_full[positive_idx]; mz_fft_complex_pos = mz_fft_full[positive_idx]
+        # Find peaks in the normalized spectra
+        try: distance = max(5, int(n_fft / 500)); mx_peaks_indices = signal.find_peaks(mx_fft_pos_amp, height=threshold, distance=distance)[0]; mz_peaks_indices = signal.find_peaks(mz_fft_pos_amp, height=threshold, distance=distance)[0]
+        except Exception as e: analysis_result = empty_analysis.copy(); analysis_result.update({ 'drive_frequency': drive_freq, 'drive_period': drive_period, 'frequencies': freqs, 'positive_frequencies': pos_freqs, 'mx_fft_power': mx_fft_power, 'mz_fft_power': mz_fft_power, 'mx_fft_pos': mx_fft_pos_amp, 'mz_fft_pos': mz_fft_pos_amp, 'mx_fft_complex_pos': mx_fft_complex_pos, 'mz_fft_complex_pos': mz_fft_complex_pos }); return analysis_result # Return partial results if peak finding fails
+        # Sort peaks by amplitude
+        mx_peaks_indices = mx_peaks_indices[np.argsort(mx_fft_pos_amp[mx_peaks_indices])[::-1]] if mx_peaks_indices.size > 0 else np.array([]); mz_peaks_indices = mz_peaks_indices[np.argsort(mz_fft_pos_amp[mz_peaks_indices])[::-1]] if mz_peaks_indices.size > 0 else np.array([])
+        # Identify subharmonics
+        expected_subharmonics = [drive_freq / n for n in range(2, 7)] if drive_freq > 0 else []
+        mx_tc_strength, mx_tc_freq, mx_tc_period, mx_tc_ratio, mx_exact_subharmonic, mx_closest_n = 0, 0, 0, 0, False, 0; mz_tc_strength, mz_tc_freq, mz_tc_period, mz_tc_ratio, mz_exact_subharmonic, mz_closest_n = 0, 0, 0, 0, False, 0
+        mx_significant_freqs = []; mz_significant_freqs = []
+        for peak_idx in mx_peaks_indices:
+             peak_freq = pos_freqs[peak_idx]; peak_amp = mx_fft_pos_amp[peak_idx]; peak_period = 1 / peak_freq if peak_freq > 0 else float('inf'); is_related, relation = is_harmonic_related(peak_freq, drive_freq); is_true_subharmonic = relation.startswith("drive/") and '/' in relation and relation.count('/') == 1 and relation.split('/')[1].isdigit(); n_sub = int(relation.split('/')[-1]) if is_true_subharmonic else 0; ratio_to_drive = drive_freq / peak_freq if peak_freq > 0 else float('inf')
+             mx_significant_freqs.append({'frequency': peak_freq, 'period': peak_period, 'amplitude': peak_amp, 'ratio_to_drive': ratio_to_drive, 'is_subharmonic': is_true_subharmonic, 'subharmonic_n': n_sub, 'relation': relation})
+             if is_true_subharmonic and peak_amp > mx_tc_strength: mx_tc_strength, mx_tc_freq, mx_tc_period, mx_tc_ratio, mx_exact_subharmonic, mx_closest_n = peak_amp, peak_freq, peak_period, ratio_to_drive, True, n_sub
+        for peak_idx in mz_peaks_indices:
+             peak_freq = pos_freqs[peak_idx]; peak_amp = mz_fft_pos_amp[peak_idx]; peak_period = 1 / peak_freq if peak_freq > 0 else float('inf'); is_related, relation = is_harmonic_related(peak_freq, drive_freq); is_true_subharmonic = relation.startswith("drive/") and '/' in relation and relation.count('/') == 1 and relation.split('/')[1].isdigit(); n_sub = int(relation.split('/')[-1]) if is_true_subharmonic else 0; ratio_to_drive = drive_freq / peak_freq if peak_freq > 0 else float('inf')
+             mz_significant_freqs.append({'frequency': peak_freq, 'period': peak_period, 'amplitude': peak_amp, 'ratio_to_drive': ratio_to_drive, 'is_subharmonic': is_true_subharmonic, 'subharmonic_n': n_sub, 'relation': relation})
+             if is_true_subharmonic and peak_amp > mz_tc_strength: mz_tc_strength, mz_tc_freq, mz_tc_period, mz_tc_ratio, mz_exact_subharmonic, mz_closest_n = peak_amp, peak_freq, peak_period, ratio_to_drive, True, n_sub
+        # Legacy frequency crystal analysis (wavelet-based, currently returns default)
+        frequency_crystal_result = self._analyze_frequency_crystal_wavelet(results['wavelet_coeffs'], drive_freq)
+        # Compile final analysis results
+        analysis_result = { 'drive_frequency': drive_freq, 'drive_period': drive_period, 'expected_subharmonics': expected_subharmonics, 'mx_time_crystal_strength': mx_tc_strength, 'mx_time_crystal_frequency': mx_tc_freq, 'mx_time_crystal_period': mx_tc_period, 'mx_time_crystal_ratio': mx_tc_ratio, 'mx_exact_subharmonic': mx_exact_subharmonic, 'mx_closest_n': mx_closest_n, 'mx_significant_frequencies': mx_significant_freqs, 'mz_time_crystal_strength': mz_tc_strength, 'mz_time_crystal_frequency': mz_tc_freq, 'mz_time_crystal_period': mz_tc_period, 'mz_time_crystal_ratio': mz_tc_ratio, 'mz_exact_subharmonic': mz_exact_subharmonic, 'mz_closest_n': mz_closest_n, 'mz_significant_frequencies': mz_significant_freqs, 'frequency_crystal_detected': frequency_crystal_result['order_parameter'], 'frequency_crystal_frequencies': frequency_crystal_result['frequencies'], 'frequencies': freqs, 'positive_frequencies': pos_freqs, 'mx_fft_power': mx_fft_power, 'mz_fft_power': mz_fft_power, 'mx_fft_pos': mx_fft_pos_amp, 'mz_fft_pos': mz_fft_pos_amp, 'mx_fft_complex_pos': mx_fft_complex_pos, 'mz_fft_complex_pos': mz_fft_complex_pos, 'mx_peaks_indices': mx_peaks_indices, 'mz_peaks_indices': mz_peaks_indices }
+        return analysis_result
+
+    # --- _analyze_frequency_crystal_wavelet method ---
+    def _analyze_frequency_crystal_wavelet(self, wavelet_coeffs, drive_freq, threshold=0.25):
+        """Legacy wavelet analysis - returns default."""
+        # (Implementation unchanged)
+        # This method is currently a placeholder and doesn't perform actual wavelet FC analysis.
+        return {'order_parameter': 0.0, 'frequencies': []}
+
+    # --- analyze_spatial_frequency_patterns method ---
+    def analyze_spatial_frequency_patterns(self, results):
+        """Analyzes spatial patterns for persistent spatial frequency signatures."""
+        # (Implementation unchanged - details omitted for brevity)
+        if 'spatial_patterns' not in results or not results['spatial_patterns']: return {'detected': False, 'score': 0, 'top_spatial_frequencies': [], 'fft_evolution_samples': []}
+        try: first_pattern = results['spatial_patterns'][0]; num_qubits = len(first_pattern['x']); num_steps = len(results['spatial_patterns'])
+        except Exception as e: return {'detected': False, 'score': 0, 'top_spatial_frequencies': [], 'fft_evolution_samples': []}
+        if num_qubits <= 1: return {'detected': False, 'score': 0, 'top_spatial_frequencies': [], 'fft_evolution_samples': []}
+        spatial_fft_evolution = []; spatial_freq_peaks = []; sample_indices = np.linspace(0, num_steps-1, min(50, num_steps)).astype(int) # Sample up to 50 points
+        for idx in sample_indices:
+            if idx >= len(results['times']) or idx >= len(results['spatial_patterns']): continue # Check bounds
+            time_val = results['times'][idx]
+            try: pattern_data = results['spatial_patterns'][idx]; x_pattern = np.array(pattern_data['x']); z_pattern = np.array(pattern_data['z'])
+            except Exception: continue # Skip if data is malformed
+            if x_pattern.size != num_qubits or z_pattern.size != num_qubits: continue # Ensure correct size
+            # Perform spatial FFT
+            x_fft = np.fft.fft(x_pattern - np.mean(x_pattern)); z_fft = np.fft.fft(z_pattern - np.mean(z_pattern)); x_amp = np.abs(x_fft); z_amp = np.abs(z_fft)
+            positive_k_indices = range(1, num_qubits // 2 + 1); # Indices for positive spatial frequencies (excluding k=0)
+            if not positive_k_indices: continue # Skip if no positive k indices
+            # Normalize amplitudes
+            max_x = np.max(x_amp[positive_k_indices]) if any(positive_k_indices) else 0; max_z = np.max(z_amp[positive_k_indices]) if any(positive_k_indices) else 0
+            x_norm = x_amp / max_x if max_x > 0 else x_amp; z_norm = z_amp / max_z if max_z > 0 else z_amp
+            # Find peaks in spatial FFT
+            x_peaks_rel, _ = signal.find_peaks(x_norm[positive_k_indices], height=0.3); z_peaks_rel, _ = signal.find_peaks(z_norm[positive_k_indices], height=0.3)
+            x_peaks_k = [positive_k_indices[p] for p in x_peaks_rel]; z_peaks_k = [positive_k_indices[p] for p in z_peaks_rel]
+            # Store FFT evolution and peaks
+            spatial_fft_evolution.append({'time': time_val, 'x_spatial_fft': x_amp.tolist(), 'z_spatial_fft': z_amp.tolist(), 'x_peaks_k': x_peaks_k, 'z_peaks_k': z_peaks_k})
+            for k in x_peaks_k: spatial_freq_peaks.append({'time': time_val, 'k': k, 'wl': num_qubits/k if k>0 else float('inf'), 'amp': x_amp[k], 'basis': 'x'})
+            for k in z_peaks_k: spatial_freq_peaks.append({'time': time_val, 'k': k, 'wl': num_qubits/k if k>0 else float('inf'), 'amp': z_amp[k], 'basis': 'z'})
+        # Analyze persistence of spatial frequencies
+        freq_counts = {}
+        for peak in spatial_freq_peaks:
+            key = f"k{peak['k']}_{peak['basis']}";
+            if key not in freq_counts: freq_counts[key] = {'count': 0, 'k': peak['k'], 'wl': peak['wl'], 'basis': peak['basis'], 'total_amp': 0, 'times': []}
+            freq_counts[key]['count'] += 1; freq_counts[key]['total_amp'] += peak['amp']; freq_counts[key]['times'].append(peak['time'])
+        # Calculate persistence and average amplitude
+        consistent_patterns = []
+        for key, data in freq_counts.items():
+            if data['count'] > 0: data['avg_amp'] = data['total_amp'] / data['count']; data['persistence'] = data['count'] / len(sample_indices); consistent_patterns.append(data)
+        consistent_patterns.sort(key=lambda x: (x['persistence'], x['avg_amp']), reverse=True) # Sort by persistence, then amplitude
+        # Calculate overall score based on top patterns
+        overall_score, pattern_score, time_consistency = 0, 0, 0
+        if consistent_patterns:
+            top_patterns = consistent_patterns[:min(3, len(consistent_patterns))]; max_avg_amp = max(p['avg_amp'] for p in top_patterns) if top_patterns else 0
+            pattern_score = np.mean([p['persistence'] * (p['avg_amp'] / max_avg_amp if max_avg_amp > 0 else 1.0) for p in top_patterns])
+            # Assess time consistency (regularity of appearance)
+            time_scores = []
+            for p in top_patterns:
+                if len(p['times']) > 2: diffs = np.diff(sorted(p['times'])); mean_d = np.mean(diffs);
+                if mean_d > 1e-9: time_scores.append(max(0, 1 - (np.std(diffs) / mean_d))) # Score based on std dev relative to mean time difference
+            if time_scores: time_consistency = np.mean(time_scores)
+            overall_score = 0.6 * pattern_score + 0.4 * time_consistency # Weighted score
+        return {'detected': overall_score > 0.3, 'score': overall_score, 'pattern_score': pattern_score, 'time_consistency': time_consistency, 'top_spatial_frequencies': consistent_patterns[:5], 'fft_evolution_samples': spatial_fft_evolution}
+
+    # --- visualize_results method ---
+    def visualize_results(self, results, analysis, fc_fft_analysis=None, fc_comb_analysis=None, log_fc_comb_analysis=None, save_figures=True, base_filename=None, figures_path=FIGURES_BASE_PATH): # <<< LOG COMB MODIFICATION >>> Added log_fc_comb_analysis
+        """Visualizes simulation results, highlighting selected linear and log comb peaks."""
+        # (Implementation unchanged - details omitted for brevity, except for highlighting)
+        plt.close('all'); fig_list = [] # Keep track of figures to close
+        drive_freq = analysis.get('drive_frequency', 0); pos_freqs = analysis.get('positive_frequencies', np.array([])); mx_fft_pos = analysis.get('mx_fft_pos', np.array([])); mz_fft_pos = analysis.get('mz_fft_pos', np.array([])); peak_threshold = 0.1; epsilon = 1e-10 # Small value for log plots
+        if pos_freqs.size == 0 or mx_fft_pos.size == 0 or mz_fft_pos.size == 0: return base_filename # Cannot plot without FFT data
+
+        # Helper to find nearest index (needed for plotting highlights)
+        def find_nearest_index(array, value):
+            idx = np.searchsorted(array, value, side="left")
+            return idx-1 if idx > 0 and (idx == len(array) or abs(value - array[idx-1]) < abs(value - array[idx])) else idx
+
+        fig1 = plt.figure(figsize=(16, 14)); fig_list.append(fig1)
+        # Plot 1: Magnetization Evolution
+        ax1 = fig1.add_subplot(321); ax1.plot(results['times'], results['x_magnetization'], 'b-', label='X Mag', lw=1); ax1.plot(results['times'], results['z_magnetization'], 'r-', label='Z Mag', lw=1); ax1.set_xlabel('Time'); ax1.set_ylabel('Magnetization'); ax1.set_title('Magnetization Evolution'); ax1.legend(); ax1.grid(True)
+        # Plot 2: Entropy Evolution
+        ax2 = fig1.add_subplot(322); ax2.plot(results['times'], results['entropy'], 'g-', lw=1); ax2.set_xlabel('Time'); ax2.set_ylabel('Entropy'); ax2.set_title('Von Neumann Entropy'); ax2.grid(True)
+        # Plot 3: FFT Spectrum (Linear Scale)
+        ax3 = fig1.add_subplot(323); ax3.plot(pos_freqs, mx_fft_pos, 'b.-', label='X FFT', markersize=4, lw=0.5); ax3.plot(pos_freqs, mz_fft_pos, 'r.-', label='Z FFT', markersize=4, lw=0.5); ax3.set_xlabel('Frequency (Hz)'); ax3.set_ylabel('Normalized Power'); ax3.set_title('FFT Spectrum (Linear Scale)'); ax3.legend(loc='upper right'); ax3.grid(True, which='both'); ax3.set_ylim(bottom=0)
+        # Plot 4: FFT Spectrum (Log Scale)
+        ax4 = fig1.add_subplot(324); ax4.semilogy(pos_freqs, np.maximum(mx_fft_pos, epsilon), 'b.-', label='X FFT', markersize=4, lw=0.5); ax4.semilogy(pos_freqs, np.maximum(mz_fft_pos, epsilon), 'r.-', label='Z FFT', markersize=4, lw=0.5); ax4.set_xlabel('Frequency (Hz)'); ax4.set_ylabel('Normalized Power'); ax4.set_title('FFT Spectrum (Log Scale)'); ax4.legend(loc='upper right'); ax4.grid(True, which='both')
+
+        # --- Highlight selected comb peaks ---
+        linear_comb_peak_freqs = {}
+        log_comb_peak_freqs = {} # <<< LOG COMB MODIFICATION >>>
+        if fc_comb_analysis: # Linear combs
+            if fc_comb_analysis.get('mx_comb_found', False): linear_comb_peak_freqs['mx'] = fc_comb_analysis.get('mx_comb_freqs', [])
+            if fc_comb_analysis.get('mz_comb_found', False): linear_comb_peak_freqs['mz'] = fc_comb_analysis.get('mz_comb_freqs', [])
+        # <<< LOG COMB MODIFICATION START >>>
+        if log_fc_comb_analysis: # Logarithmic combs
+            if log_fc_comb_analysis.get('mx_log_comb_found', False): log_comb_peak_freqs['mx'] = log_fc_comb_analysis.get('mx_log_comb_freqs', [])
+            if log_fc_comb_analysis.get('mz_log_comb_found', False): log_comb_peak_freqs['mz'] = log_fc_comb_analysis.get('mz_log_comb_freqs', [])
+        # <<< LOG COMB MODIFICATION END >>>
+
+
+        # Helper to find amplitude at a given frequency
+        def get_amp_at_freq(target_freq, freqs_array, amps_array):
+            if len(freqs_array) == 0: return 0
+            idx = find_nearest_index(freqs_array, target_freq)
+            # Check if the found index frequency is close enough
+            freq_step = freqs_array[1] - freqs_array[0] if len(freqs_array) > 1 else 1e-9
+            if idx < len(freqs_array) and abs(freqs_array[idx] - target_freq) < freq_step * 1.5: # Check within 1.5 freq step (slightly more tolerant)
+                return amps_array[idx]
+            return 0 # Return 0 if not found or too far
+
+        # Plot highlights on linear scale (ax3)
+        legend_updated_ax3 = False
+        if 'mx' in linear_comb_peak_freqs and len(linear_comb_peak_freqs['mx']) > 0:
+            amps = [get_amp_at_freq(f, pos_freqs, mx_fft_pos) for f in linear_comb_peak_freqs['mx']]
+            ax3.plot(linear_comb_peak_freqs['mx'], amps, 'bo', markersize=8, fillstyle='none', markeredgewidth=1.5, label='Mx LinComb')
+            legend_updated_ax3 = True
+        if 'mz' in linear_comb_peak_freqs and len(linear_comb_peak_freqs['mz']) > 0:
+            amps = [get_amp_at_freq(f, pos_freqs, mz_fft_pos) for f in linear_comb_peak_freqs['mz']]
+            ax3.plot(linear_comb_peak_freqs['mz'], amps, 'ro', markersize=8, fillstyle='none', markeredgewidth=1.5, label='Mz LinComb')
+            legend_updated_ax3 = True
+        # <<< LOG COMB MODIFICATION START >>> Highlight Log Combs (different marker)
+        if 'mx' in log_comb_peak_freqs and len(log_comb_peak_freqs['mx']) > 0:
+            amps = [get_amp_at_freq(f, pos_freqs, mx_fft_pos) for f in log_comb_peak_freqs['mx']]
+            ax3.plot(log_comb_peak_freqs['mx'], amps, 'b^', markersize=8, fillstyle='none', markeredgewidth=1.5, label='Mx LogComb') # Triangle marker
+            legend_updated_ax3 = True
+        if 'mz' in log_comb_peak_freqs and len(log_comb_peak_freqs['mz']) > 0:
+            amps = [get_amp_at_freq(f, pos_freqs, mz_fft_pos) for f in log_comb_peak_freqs['mz']]
+            ax3.plot(log_comb_peak_freqs['mz'], amps, 'r^', markersize=8, fillstyle='none', markeredgewidth=1.5, label='Mz LogComb') # Triangle marker
+            legend_updated_ax3 = True
+        # <<< LOG COMB MODIFICATION END >>>
+        if legend_updated_ax3: ax3.legend(loc='upper right', fontsize=8) # Update legend only if combs were plotted
+
+        # Plot highlights on log scale (ax4)
+        legend_updated_ax4 = False
+        if 'mx' in linear_comb_peak_freqs and len(linear_comb_peak_freqs['mx']) > 0:
+            amps = [get_amp_at_freq(f, pos_freqs, mx_fft_pos) for f in linear_comb_peak_freqs['mx']]
+            ax4.plot(linear_comb_peak_freqs['mx'], np.maximum(amps, epsilon), 'bo', markersize=8, fillstyle='none', markeredgewidth=1.5, label='Mx LinComb')
+            legend_updated_ax4 = True
+        if 'mz' in linear_comb_peak_freqs and len(linear_comb_peak_freqs['mz']) > 0:
+            amps = [get_amp_at_freq(f, pos_freqs, mz_fft_pos) for f in linear_comb_peak_freqs['mz']]
+            ax4.plot(linear_comb_peak_freqs['mz'], np.maximum(amps, epsilon), 'ro', markersize=8, fillstyle='none', markeredgewidth=1.5, label='Mz LinComb')
+            legend_updated_ax4 = True
+        # <<< LOG COMB MODIFICATION START >>> Highlight Log Combs (different marker)
+        if 'mx' in log_comb_peak_freqs and len(log_comb_peak_freqs['mx']) > 0:
+            amps = [get_amp_at_freq(f, pos_freqs, mx_fft_pos) for f in log_comb_peak_freqs['mx']]
+            ax4.plot(log_comb_peak_freqs['mx'], np.maximum(amps, epsilon), 'b^', markersize=8, fillstyle='none', markeredgewidth=1.5, label='Mx LogComb') # Triangle marker
+            legend_updated_ax4 = True
+        if 'mz' in log_comb_peak_freqs and len(log_comb_peak_freqs['mz']) > 0:
+            amps = [get_amp_at_freq(f, pos_freqs, mz_fft_pos) for f in log_comb_peak_freqs['mz']]
+            ax4.plot(log_comb_peak_freqs['mz'], np.maximum(amps, epsilon), 'r^', markersize=8, fillstyle='none', markeredgewidth=1.5, label='Mz LogComb') # Triangle marker
+            legend_updated_ax4 = True
+        # <<< LOG COMB MODIFICATION END >>>
+        if legend_updated_ax4: ax4.legend(loc='upper right', fontsize=8) # Update legend only if combs were plotted
+        # --- END MODIFICATION ---
+
+        # Plot 5: Frequency Comb Phase Analysis (Linear Comb Only for now)
+        ax5 = fig1.add_subplot(325); ax5.set_title('Linear Frequency Comb Phase Analysis'); comb_plotted = False
+        if fc_comb_analysis:
+            for basis, color in [('mx', 'blue'), ('mz', 'red')]:
+                if fc_comb_analysis.get(f'{basis}_comb_found', False):
+                    comb_details = fc_comb_analysis.get(f'{basis}_comb_details', []);
+                    if comb_details: # Plot the best comb found
+                        best_comb = comb_details[0]; comb_freqs = best_comb['frequencies']; comb_phases = best_comb['phases']
+                        if len(comb_freqs) > 1: unwrapped_phases = np.unwrap(comb_phases); ax5.plot(comb_freqs, unwrapped_phases, marker='o', linestyle='-', color=color, markersize=5, label=f'{basis.upper()} LinComb Phase ($\\Omega\\approx{best_comb["omega"]:.2f}$ Hz, $\\theta\\approx{best_comb["mean_theta"]:.2f}$ rad)'); comb_plotted = True
+        if comb_plotted: ax5.set_xlabel('Frequency (Hz)'); ax5.set_ylabel('Unwrapped Phase (radians)'); ax5.legend(fontsize=8); ax5.grid(True)
+        else: ax5.text(0.5, 0.5, 'No Linear Frequency Comb\nDetected or Plotted', ha='center', va='center', fontsize=10)
+        # Plot 6: Time Crystal Subharmonic Strength
+        ax6 = fig1.add_subplot(326); tc_labels = ['X Mag', 'Z Mag']; tc_strengths = [analysis.get('mx_time_crystal_strength', 0), analysis.get('mz_time_crystal_strength', 0)]; ax6.bar(tc_labels, tc_strengths, color=['blue', 'red']); ax6.set_ylabel('Max Subharmonic Strength'); ax6.set_title('Time Crystal Subharmonic Strength'); ax6.set_ylim(0, 1.05)
+        # Annotate TC bars
+        mx_freq = analysis.get('mx_time_crystal_frequency', 0); mx_n = analysis.get('mx_closest_n', 0); mz_freq = analysis.get('mz_time_crystal_frequency', 0); mz_n = analysis.get('mz_closest_n', 0)
+        label_mx = f'{tc_strengths[0]:.3f}\n' + (f'(drive/{mx_n})\n{mx_freq:.3f}Hz' if mx_n > 0 else 'No Subharm.'); label_mz = f'{tc_strengths[1]:.3f}\n' + (f'(drive/{mz_n})\n{mz_freq:.3f}Hz' if mz_n > 0 else 'No Subharm.')
+        ax6.text(0, tc_strengths[0] + 0.02, label_mx, ha='center', va='bottom', fontsize=9); ax6.text(1, tc_strengths[1] + 0.02, label_mz, ha='center', va='bottom', fontsize=9)
+        # Overall figure title and layout adjustment
+        fig1.suptitle((f'Overview: Circuit={self.circuit.name}, Q={self.num_qubits}, J={self.J:.2f}, h1={self.h1:.2f}, ' f'ω_ratio={self.omega_ratio:.3f}, Bias={self.static_bias_strength:.2f}, Fdrive={drive_freq:.3f} Hz'), fontsize=14); fig1.tight_layout(rect=[0, 0.03, 1, 0.95])
+        # --- Figure 2: Detailed Plots ---
+        fig2 = plt.figure(figsize=(12, 6)); fig_list.append(fig2)
+        # Plot 2.1: Phase Space Trajectory
+        ax2_1 = fig2.add_subplot(121); transient_pts = int(len(results['times']) * 0.2); ax2_1.plot(results['x_magnetization'][transient_pts:], results['z_magnetization'][transient_pts:], 'k-', lw=0.5, label='Stable Trajectory'); ax2_1.plot(results['x_magnetization'][:transient_pts], results['z_magnetization'][:transient_pts], 'gray', lw=0.5, label='Transient'); ax2_1.set_xlabel('X Magnetization'); ax2_1.set_ylabel('Z Magnetization'); ax2_1.set_title('Phase Space Trajectory (Mx vs Mz)'); ax2_1.grid(True); ax2_1.axis('equal'); ax2_1.legend(fontsize=8)
+        # Plot 2.2: Spatial FFT Evolution
+        ax2_2 = fig2.add_subplot(122); spatial_analysis = analysis.get('spatial_frequency_crystal', {}); fft_samples = spatial_analysis.get('fft_evolution_samples', [])
+        if fft_samples:
+            times_sampled = [s['time'] for s in fft_samples]; num_qubits_spatial = len(fft_samples[0]['z_spatial_fft']); z_fft_over_time = np.array([s['z_spatial_fft'][1:num_qubits_spatial//2+1] for s in fft_samples]).T # Transpose for imshow
+            if z_fft_over_time.size > 0: im = ax2_2.imshow(np.log10(np.maximum(z_fft_over_time, epsilon)), aspect='auto', origin='lower', extent=[min(times_sampled), max(times_sampled), 0, num_qubits_spatial//2], cmap='viridis'); ax2_2.set_xlabel('Time'); ax2_2.set_ylabel('Spatial Frequency k Index'); ax2_2.set_title('Spatial FFT (Z Mag) Evolution (Log Scale)'); plt.colorbar(im, ax=ax2_2, label='Log10(FFT Amplitude)')
+            else: ax2_2.text(0.5, 0.5, 'No Spatial FFT Data', ha='center', va='center')
+        else: ax2_2.set_title('Spatial FFT (Placeholder)'); ax2_2.text(0.5, 0.5, 'Spatial FFT Analysis\nData Not Available', ha='center', va='center')
+        # Overall figure title and layout adjustment
+        fig2.suptitle(f'Detailed Analysis: {base_filename}', fontsize=12); fig2.tight_layout(rect=[0, 0.03, 1, 0.95])
+        # Save figures if requested
+        if save_figures:
+            if base_filename is None: base_filename = f"quantum_sim_{self.circuit_type}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            os.makedirs(figures_path, exist_ok=True); fig1_path = os.path.join(figures_path, f'{base_filename}_overview.png'); fig2_path = os.path.join(figures_path, f'{base_filename}_detailed.png')
+            print(f"Saving figures to {figures_path} with base name: {base_filename}")
+            try: fig1.savefig(fig1_path, dpi=150, bbox_inches='tight'); fig2.savefig(fig2_path, dpi=150, bbox_inches='tight')
+            except Exception as e: print(f"Error saving figures for {base_filename}: {e}")
+        # Close figures to free memory
+        for fig in fig_list: plt.close(fig)
+        return base_filename if save_figures else None
+
+    # --- visualize_fft_for_scan method ---
+    def visualize_fft_for_scan(self, analysis, fc_fft_analysis, fc_comb_analysis, log_fc_comb_analysis, base_filename, figures_path): # <<< LOG COMB MODIFICATION >>> Added log_fc_comb_analysis
+        """Generates and saves FFT plots, highlighting selected linear and log comb peaks."""
+        # (Implementation unchanged - details omitted for brevity, except for highlighting)
+        plt.close('all'); drive_freq = analysis.get('drive_frequency', 0); pos_freqs = analysis.get('positive_frequencies', np.array([])); mx_fft_pos = analysis.get('mx_fft_pos', np.array([])); mz_fft_pos = analysis.get('mz_fft_pos', np.array([])); peak_threshold = 0.1; epsilon = 1e-10
+        if pos_freqs.size == 0 or mx_fft_pos.size == 0 or mz_fft_pos.size == 0: return # Cannot plot without FFT data
+
+        # Helper to find nearest index (needed for plotting highlights)
+        def find_nearest_index(array, value):
+            idx = np.searchsorted(array, value, side="left")
+            return idx-1 if idx > 0 and (idx == len(array) or abs(value - array[idx-1]) < abs(value - array[idx])) else idx
+
+        # Determine if a phase plot is needed (if any linear comb was found)
+        mx_lin_comb_found = fc_comb_analysis.get('mx_comb_found', False); mz_lin_comb_found = fc_comb_analysis.get('mz_comb_found', False); add_phase_plot = mx_lin_comb_found or mz_lin_comb_found
+        # <<< LOG COMB MODIFICATION >>> Phase plot currently only for linear combs
+        fig_width = 21 if add_phase_plot else 14; num_cols = 3 if add_phase_plot else 2; fig = plt.figure(figsize=(fig_width, 6))
+        # Plot 1: FFT Linear Scale
+        ax1 = fig.add_subplot(1, num_cols, 1); ax1.plot(pos_freqs, mx_fft_pos, 'b.-', label='X FFT', markersize=4, lw=0.5); ax1.plot(pos_freqs, mz_fft_pos, 'r.-', label='Z FFT', markersize=4, lw=0.5); ax1.set_xlabel('Frequency (Hz)'); ax1.set_ylabel('Normalized Power'); ax1.set_title('FFT Spectrum (Linear)'); ax1.legend(loc='upper right', fontsize=8); ax1.grid(True, which='both'); ax1.set_ylim(bottom=-0.05)
+        # Plot 2: FFT Log Scale
+        ax2 = fig.add_subplot(1, num_cols, 2); ax2.semilogy(pos_freqs, np.maximum(mx_fft_pos, epsilon), 'b.-', label='X FFT', markersize=4, lw=0.5); ax2.semilogy(pos_freqs, np.maximum(mz_fft_pos, epsilon), 'r.-', label='Z FFT', markersize=4, lw=0.5); ax2.set_xlabel('Frequency (Hz)'); ax2.set_ylabel('Normalized Power (log)'); ax2.set_title('FFT Spectrum (Log)'); ax2.legend(loc='upper right', fontsize=8); ax2.grid(True, which='both')
+
+        # --- Highlight selected comb peaks ---
+        linear_comb_peak_freqs = {}
+        log_comb_peak_freqs = {} # <<< LOG COMB MODIFICATION >>>
+        if fc_comb_analysis: # Linear combs
+            if fc_comb_analysis.get('mx_comb_found', False): linear_comb_peak_freqs['mx'] = fc_comb_analysis.get('mx_comb_freqs', [])
+            if fc_comb_analysis.get('mz_comb_found', False): linear_comb_peak_freqs['mz'] = fc_comb_analysis.get('mz_comb_freqs', [])
+        # <<< LOG COMB MODIFICATION START >>>
+        if log_fc_comb_analysis: # Logarithmic combs
+            if log_fc_comb_analysis.get('mx_log_comb_found', False): log_comb_peak_freqs['mx'] = log_fc_comb_analysis.get('mx_log_comb_freqs', [])
+            if log_fc_comb_analysis.get('mz_log_comb_found', False): log_comb_peak_freqs['mz'] = log_fc_comb_analysis.get('mz_log_comb_freqs', [])
+        # <<< LOG COMB MODIFICATION END >>>
+
+        # Helper to find amplitude at a given frequency (reused from visualize_results)
+        def get_amp_at_freq(target_freq, freqs_array, amps_array):
+            if len(freqs_array) == 0: return 0
+            idx = find_nearest_index(freqs_array, target_freq)
+            freq_step = freqs_array[1] - freqs_array[0] if len(freqs_array) > 1 else 1e-9
+            if idx < len(freqs_array) and abs(freqs_array[idx] - target_freq) < freq_step * 1.5:
+                return amps_array[idx]
+            return 0
+
+        # Plot highlights on linear scale (ax1)
+        legend_updated_ax1 = False
+        if 'mx' in linear_comb_peak_freqs and len(linear_comb_peak_freqs['mx']) > 0:
+            amps = [get_amp_at_freq(f, pos_freqs, mx_fft_pos) for f in linear_comb_peak_freqs['mx']]
+            ax1.plot(linear_comb_peak_freqs['mx'], amps, 'bo', markersize=8, fillstyle='none', markeredgewidth=1.5, label='Mx LinComb')
+            legend_updated_ax1 = True
+        if 'mz' in linear_comb_peak_freqs and len(linear_comb_peak_freqs['mz']) > 0:
+            amps = [get_amp_at_freq(f, pos_freqs, mz_fft_pos) for f in linear_comb_peak_freqs['mz']]
+            ax1.plot(linear_comb_peak_freqs['mz'], amps, 'ro', markersize=8, fillstyle='none', markeredgewidth=1.5, label='Mz LinComb')
+            legend_updated_ax1 = True
+        # <<< LOG COMB MODIFICATION START >>> Highlight Log Combs (different marker)
+        if 'mx' in log_comb_peak_freqs and len(log_comb_peak_freqs['mx']) > 0:
+            amps = [get_amp_at_freq(f, pos_freqs, mx_fft_pos) for f in log_comb_peak_freqs['mx']]
+            ax1.plot(log_comb_peak_freqs['mx'], amps, 'b^', markersize=8, fillstyle='none', markeredgewidth=1.5, label='Mx LogComb') # Triangle marker
+            legend_updated_ax1 = True
+        if 'mz' in log_comb_peak_freqs and len(log_comb_peak_freqs['mz']) > 0:
+            amps = [get_amp_at_freq(f, pos_freqs, mz_fft_pos) for f in log_comb_peak_freqs['mz']]
+            ax1.plot(log_comb_peak_freqs['mz'], amps, 'r^', markersize=8, fillstyle='none', markeredgewidth=1.5, label='Mz LogComb') # Triangle marker
+            legend_updated_ax1 = True
+        # <<< LOG COMB MODIFICATION END >>>
+        if legend_updated_ax1: ax1.legend(loc='upper right', fontsize=8) # Update legend
+
+        # Plot highlights on log scale (ax2)
+        legend_updated_ax2 = False
+        if 'mx' in linear_comb_peak_freqs and len(linear_comb_peak_freqs['mx']) > 0:
+            amps = [get_amp_at_freq(f, pos_freqs, mx_fft_pos) for f in linear_comb_peak_freqs['mx']]
+            ax2.plot(linear_comb_peak_freqs['mx'], np.maximum(amps, epsilon), 'bo', markersize=8, fillstyle='none', markeredgewidth=1.5, label='Mx LinComb')
+            legend_updated_ax2 = True
+        if 'mz' in linear_comb_peak_freqs and len(linear_comb_peak_freqs['mz']) > 0:
+            amps = [get_amp_at_freq(f, pos_freqs, mz_fft_pos) for f in linear_comb_peak_freqs['mz']]
+            ax2.plot(linear_comb_peak_freqs['mz'], np.maximum(amps, epsilon), 'ro', markersize=8, fillstyle='none', markeredgewidth=1.5, label='Mz LinComb')
+            legend_updated_ax2 = True
+        # <<< LOG COMB MODIFICATION START >>> Highlight Log Combs (different marker)
+        if 'mx' in log_comb_peak_freqs and len(log_comb_peak_freqs['mx']) > 0:
+            amps = [get_amp_at_freq(f, pos_freqs, mx_fft_pos) for f in log_comb_peak_freqs['mx']]
+            ax2.plot(log_comb_peak_freqs['mx'], np.maximum(amps, epsilon), 'b^', markersize=8, fillstyle='none', markeredgewidth=1.5, label='Mx LogComb') # Triangle marker
+            legend_updated_ax2 = True
+        if 'mz' in log_comb_peak_freqs and len(log_comb_peak_freqs['mz']) > 0:
+            amps = [get_amp_at_freq(f, pos_freqs, mz_fft_pos) for f in log_comb_peak_freqs['mz']]
+            ax2.plot(log_comb_peak_freqs['mz'], np.maximum(amps, epsilon), 'r^', markersize=8, fillstyle='none', markeredgewidth=1.5, label='Mz LogComb') # Triangle marker
+            legend_updated_ax2 = True
+        # <<< LOG COMB MODIFICATION END >>>
+        if legend_updated_ax2: ax2.legend(loc='upper right', fontsize=8) # Update legend
+        # --- END MODIFICATION ---
+
+        # Plot 3: Linear Comb Phase Steps (if applicable)
+        if add_phase_plot:
+            ax3 = fig.add_subplot(1, num_cols, 3); ax3.set_title('Best Linear Comb Phase Steps'); comb_plotted_scan = False
+            for basis, color in [('mx', 'blue'), ('mz', 'red')]:
+                 if fc_comb_analysis.get(f'{basis}_comb_found', False):
+                    comb_details = fc_comb_analysis.get(f'{basis}_comb_details', []);
+                    if comb_details: # Use the best comb (first in sorted list)
+                        best_comb = comb_details[0]; comb_freqs = best_comb['frequencies']; phase_steps = best_comb.get('phase_steps', [])
+                        if len(comb_freqs) > 1 and len(phase_steps) > 0: # Need at least 2 teeth for steps
+                             step_freqs = (np.array(comb_freqs[:-1]) + np.array(comb_freqs[1:])) / 2; # Freqs at midpoint between teeth
+                             ax3.plot(step_freqs, phase_steps, marker='x', linestyle='--', color=color, markersize=5, label=f'{basis.upper()} LinSteps ($\\theta\\approx{best_comb["mean_theta"]:.2f}$ rad)'); comb_plotted_scan = True
+            if comb_plotted_scan: ax3.set_xlabel('Frequency Midpoint (Hz)'); ax3.set_ylabel('Phase Step (radians)'); ax3.legend(fontsize=8); ax3.grid(True)
+            else: ax3.text(0.5, 0.5, 'LinComb Data Error\nor < 2 Teeth', ha='center', va='center', fontsize=10) # More informative message
+        # Figure title and saving
+        fig_title = (f'FFT & Comb: Circ={self.circuit.name}, Q={self.num_qubits}, J={self.J:.2f}, h1={self.h1:.2f}, ' f'ωr={self.omega_ratio:.3f}, Bias={self.static_bias_strength:.2f}, Fdrive={drive_freq:.3f}'); fig.suptitle(fig_title, fontsize=10); fig.tight_layout(rect=[0, 0.03, 1, 0.92])
+        os.makedirs(figures_path, exist_ok=True); fig_path_png = os.path.join(figures_path, f'{base_filename}_FFT_Comb.png')
+        try: fig.savefig(fig_path_png, dpi=150, bbox_inches='tight')
+        except Exception as e: print(f"Error saving FFT/Comb plot {fig_path_png}: {e}")
+        finally: plt.close(fig) # Ensure figure is closed
+
+    # --- save_results method (MODIFIED) ---
+    def save_results(simulator_instance, # Pass the simulator instance for parameters
+                     results, analysis, fc_fft_analysis,
+                     fc_comb_analysis, log_fc_comb_analysis,
+                     penrose_comb_analysis_mx, # Added Penrose Mx results
+                     penrose_comb_analysis_mz, # Added Penrose Mz results
+                     base_filename, results_path, numeric_data_path):
+        """
+        Saves simulation summary and numeric FFT data, including Penrose Median results.
+
+        Args:
+            simulator_instance (QuantumCircuitSimulator): The simulator object containing parameters.
+            results (dict): Raw time evolution results.
+            analysis (dict): Dictionary from analyze_time_crystal.
+            fc_fft_analysis (dict): Dictionary from analyze_fft_peaks_for_fc.
+            fc_comb_analysis (dict): Dictionary from analyze_frequency_comb (linear).
+            log_fc_comb_analysis (dict): Dictionary from analyze_logarithmic_frequency_comb.
+            penrose_comb_analysis_mx (dict): Dictionary from analyze_comb_penrose_median for Mx.
+            penrose_comb_analysis_mz (dict): Dictionary from analyze_comb_penrose_median for Mz.
+            base_filename (str): Base name for output files.
+            results_path (str): Path to save summary text file.
+            numeric_data_path (str): Path to save numeric FFT data.
+
+        Returns:
+            str: The base_filename used.
+        """
+        os.makedirs(results_path, exist_ok=True)
+        os.makedirs(numeric_data_path, exist_ok=True)
+        summary_path = os.path.join(results_path, f'{base_filename}_summary.txt')
+
+        # --- Get parameters from the simulator instance ---
+        sim = simulator_instance
+        circuit_name = sim.circuit.name if sim.circuit else "Unknown"
+
+        with open(summary_path, 'w') as f:
+            # --- Write Header and Parameters ---
+            f.write(f"=== Quantum Simulation Summary ===\n")
+            f.write(f"Filename Base: {base_filename}\n")
+            f.write(f"Circuit Type: {sim.circuit_type} (Circuit Name: {circuit_name})\n")
+            f.write(f"Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"{'-'*30}\nParameters:\n")
+            f.write(f"  Num Qubits: {sim.num_qubits}\n")
+            f.write(f"  Num Shots: {sim.num_shots}\n")
+            f.write(f"  J: {sim.J:.4f}\n")
+            f.write(f"  h0: {sim.h0:.4f}\n")
+            f.write(f"  h1: {sim.h1:.4f}\n")
+            f.write(f"  omega_ratio: {sim.omega_ratio:.4f}\n")
+            f.write(f"  Wavelet Type: {sim.wavelet_type}\n")
+            f.write(f"  Static Bias Strength: {sim.static_bias_strength:.4f}\n")
+
+            # --- Write circuit-specific parameters ---
+            if sim.circuit_type == 'penrose':
+                f.write(f"  Spatial Mod Strength: {sim.spatial_mod:.4f}\n")
+                f.write(f"  Spatial Mod Period: {sim.mod_period}\n")
+            if sim.circuit_type == 'comb_generator':
+                f.write(f"  Interaction Angle: {sim.interaction_angle:.4f}\n")
+            if sim.circuit_type == 'comb_twistor':
+                f.write(f"  Interaction Angle: {sim.interaction_angle:.4f}\n")
+                f.write(f"  Twistor Angle: {sim.twistor_angle:.4f}\n")
+                f.write(f"  Chirality Angle: {sim.chirality_angle:.4f}\n")
+            if sim.circuit_type == 'graphene_fc':
+                f.write(f"  Interaction Angle (NN): {sim.interaction_angle:.4f}\n")
+                f.write(f"  Chirality Angle (NNN Base): {sim.chirality_angle:.4f}\n")
+                f.write(f"  Chirality Modulation Strength: {sim.chirality_modulation_strength:.4f}\n")
+                f.write(f"  Three Body Interaction Angle: {sim.three_body_interaction_angle:.4f}\n")
+                f.write(f"  Symmetry Breaking Strength: {sim.symmetry_breaking_strength:.4f}\n")
+                f.write(f"  Symmetry Pattern Type: {sim.symmetry_pattern_type}\n")
+
+            # --- Write Simulation Info ---
+            num_steps = len(results.get('times', []))
+            time_step = (results['times'][1] - results['times'][0]) if num_steps > 1 else 0
+            f.write(f"  Num Steps: {num_steps}\n")
+            f.write(f"  Time Step: {time_step:.4f}\n")
+            f.write(f"{'-'*30}\nAnalysis Results:\n")
+            drive_freq = analysis.get('drive_frequency', 0)
+            f.write(f"  Drive Frequency (f_drive): {drive_freq:.4f} Hz\n")
+            f.write(f"  Drive Period (T_drive): {analysis.get('drive_period', float('inf')):.4f} s\n\n")
+
+            # --- Write TC Analysis ---
+            f.write("  Time Crystal (TC) Analysis (Subharmonics f_drive/n):\n")
+            for basis in ['mx', 'mz']:
+                detected = analysis.get(f'{basis}_exact_subharmonic', False)
+                f.write(f"    {basis.upper()} TC Detected: {detected}\n")
+                if detected:
+                    f.write(f"      Frequency: {analysis.get(f'{basis}_time_crystal_frequency', 0):.4f} Hz "
+                            f"(Ratio: {analysis.get(f'{basis}_time_crystal_ratio', 0):.3f} "
+                            f"=> n={analysis.get(f'{basis}_closest_n', 0)})\n")
+                    f.write(f"      Strength: {analysis.get(f'{basis}_time_crystal_strength', 0):.4f}\n")
+
+            # --- Write FC Analysis (Incommensurate Peaks & Spatial Score) ---
+            f.write("\n  Frequency Crystal (FC) Analysis:\n")
+            potential_fc_peaks = fc_fft_analysis.get('potential_fc_peaks', [])
+            incomm_count = fc_fft_analysis.get('incommensurate_peak_count', 0)
+            strongest_incomm_peak = fc_fft_analysis.get('strongest_incommensurate_peak', None)
+            f.write(f"    Incommensurate FFT Peaks Found: {incomm_count}\n")
+            if strongest_incomm_peak:
+                f.write(f"      Strongest: Freq={strongest_incomm_peak['frequency']:.4f} Hz, "
+                        f"Amp={strongest_incomm_peak['amplitude']:.4f}, Basis={strongest_incomm_peak['basis']}\n")
+            spatial_fc_analysis = analysis.get('spatial_frequency_crystal', {})
+            spatial_score = spatial_fc_analysis.get('score', 0)
+            f.write(f"    Spatial Pattern Score: {spatial_score:.4f}\n")
+
+            # --- Write Linear Frequency Comb Analysis ---
+            f.write("\n  Linear Frequency Comb Structure Analysis (Constant Spacing Omega):\n")
+            for basis in ['mx', 'mz']:
+                comb_found = fc_comb_analysis.get(f'{basis}_comb_found', False)
+                f.write(f"    {basis.upper()} Linear Comb Detected: {comb_found}\n")
+                if comb_found:
+                    f.write(f"      Spacing (Omega): {fc_comb_analysis.get(f'{basis}_best_omega', 0):.4f} Hz\n")
+                    f.write(f"      Phase Step (theta): {fc_comb_analysis.get(f'{basis}_mean_theta', 0):.4f} rad\n")
+                    f.write(f"      Num Teeth Found: {fc_comb_analysis.get(f'{basis}_num_teeth', 0)}\n")
+                    f.write(f"      Amplitude Rel. Std Dev: {fc_comb_analysis.get(f'{basis}_amp_rel_std_dev', float('inf')):.4f}\n")
+                    f.write(f"      Phase Step Std Dev: {fc_comb_analysis.get(f'{basis}_phase_step_std_dev', float('inf')):.4f}\n")
+                    f.write(f"      Frequency Spacing Std Dev: {fc_comb_analysis.get(f'{basis}_omega_dev', float('inf')):.4f} Hz\n")
+                    f.write(f"      Internal Score: {fc_comb_analysis.get(f'{basis}_best_comb_score', float('inf')):.4f}\n")
+
+            # --- Write Logarithmic Comb Analysis ---
+            f.write("\n  Logarithmic Frequency Comb Structure Analysis (Constant Ratio R):\n")
+            for basis in ['mx', 'mz']:
+                log_comb_found = log_fc_comb_analysis.get(f'{basis}_log_comb_found', False)
+                f.write(f"    {basis.upper()} Log Comb Detected: {log_comb_found}\n")
+                if log_comb_found:
+                    f.write(f"      Scaling Factor (R): {log_fc_comb_analysis.get(f'{basis}_best_R', 0):.4f}\n")
+                    f.write(f"      Phase Step (theta_log): {log_fc_comb_analysis.get(f'{basis}_log_mean_theta', 0):.4f} rad\n")
+                    f.write(f"      Num Teeth Found: {log_fc_comb_analysis.get(f'{basis}_log_num_teeth', 0)}\n")
+                    f.write(f"      Amplitude Rel. Std Dev: {log_fc_comb_analysis.get(f'{basis}_log_amp_rel_std_dev', float('inf')):.4f}\n")
+                    f.write(f"      Phase Step Std Dev: {log_fc_comb_analysis.get(f'{basis}_log_phase_step_std_dev', float('inf')):.4f}\n")
+                    f.write(f"      Scaling Factor R Std Dev: {log_fc_comb_analysis.get(f'{basis}_log_R_dev', float('inf')):.4f}\n")
+                    f.write(f"      Internal Score: {log_fc_comb_analysis.get(f'{basis}_log_best_comb_score', float('inf')):.4f}\n")
+
+            # --- Write Penrose Median Comb Analysis ---
+            f.write("\n  Penrose Median Frequency Comb Analysis:\n")
+            for basis, penrose_analysis in [('mx', penrose_comb_analysis_mx), ('mz', penrose_comb_analysis_mz)]:
+                comb_found = penrose_analysis.get(f'{basis}_penrose_comb_found', False)
+                f.write(f"    {basis.upper()} Penrose Comb Detected: {comb_found}\n")
+                if comb_found:
+                    f.write(f"      Spacing (Omega_PM): {penrose_analysis.get(f'{basis}_penrose_omega', 0):.4f} Hz\n")
+                    f.write(f"      Phase Step (theta_PM): {penrose_analysis.get(f'{basis}_penrose_theta', 0):.4f} rad\n")
+                    f.write(f"      Num Teeth Found: {penrose_analysis.get(f'{basis}_num_teeth', 0)}\n")
+                    # Optionally add more details from penrose_analysis[f'{basis}_details'][0] if needed
+                    # e.g., phase_step_std_dev
+                    details = penrose_analysis.get(f'{basis}_details', [])
+                    if details:
+                        f.write(f"      Phase Step Std Dev (PM): {details[0].get('phase_step_std_dev', float('inf')):.4f}\n")
+                        # Format frequency lists for printing
+                        pm_freqs_str = ", ".join([f"{freq:.3f}" for freq in details[0].get('penrose_median_freqs', [])])
+                        gm_freqs_str = ", ".join([f"{freq:.3f}" for freq in details[0].get('geometric_median_freqs', [])])
+                        init_freqs_str = ", ".join([f"{freq:.3f}" for freq in details[0].get('initial_peak_freqs', [])])
+                        f.write(f"      Penrose Median Freqs (Hz): [{pm_freqs_str}]\n")
+                        f.write(f"      Geometric Median Freqs (Hz): [{gm_freqs_str}]\n")
+                        f.write(f"      Initial Peak Freqs (Hz): [{init_freqs_str}]\n")
+
+            # --- Write Detailed Potential Incommensurate Peaks ---
+            f.write("-" * 30 + "\n    Detailed Potential Incommensurate Peaks:\n")
+            if potential_fc_peaks:
+                potential_fc_peaks.sort(key=lambda x: (x['is_potentially_incommensurate'], x['amplitude']), reverse=True)
+                f.write("      Freq (Hz)   Ampl.   Ratio   Incomm? Relation Guess  Basis\n")
+                f.write("      ---------   -----   -----   ------- --------------  -----\n")
+                for peak in potential_fc_peaks[:10]: # Limit to top 10
+                    incomm_flag = "Yes" if peak['is_potentially_incommensurate'] else "No"
+                    relation = peak.get('relation_guess', 'non-harmonic')
+                    f.write(f"      {peak['frequency']:<9.4f}   {peak['amplitude']:.3f}   {peak['ratio_to_drive']:.3f}   "
+                            f"{incomm_flag:<7} {relation:<14}  {peak['basis']}\n")
+            else:
+                f.write("      None found above threshold.\n")
+            f.write("-" * 30 + "\n")
+
+            # --- Write Top Spatial Frequencies ---
+            top_spatial = spatial_fc_analysis.get('top_spatial_frequencies', [])
+            if top_spatial:
+                f.write("Top Persistent Spatial Frequencies (k):\n")
+                f.write("  k    Wavelength  Basis  Persistence  Avg. Ampl.\n")
+                f.write("  --   ----------  -----  -----------  ----------\n")
+                for p in top_spatial:
+                    wl_str = f"{p['wl']:.2f}" if p['wl'] != float('inf') else "inf"
+                    f.write(f"  {p['k']:<2}   {wl_str:<10}  {p['basis']:<5}  {p['persistence']:.3f}        {p['avg_amp']:.3e}\n")
+            else:
+                f.write("No persistent spatial frequencies detected.\n")
+
+        # --- Save Numeric FFT Data ---
+        numeric_data_path_full = os.path.join(numeric_data_path, f'{base_filename}_FFT_data.txt')
+        try:
+            pos_freqs = analysis.get('positive_frequencies', np.array([]))
+            mx_fft_complex = analysis.get('mx_fft_complex_pos', np.array([]))
+            mz_fft_complex = analysis.get('mz_fft_complex_pos', np.array([]))
+            min_len = 0
+            if pos_freqs.size > 0 and mx_fft_complex.size > 0 and mz_fft_complex.size > 0:
+                min_len = min(len(pos_freqs), len(mx_fft_complex), len(mz_fft_complex))
+
+            if min_len > 0:
+                 header_str = (f'Frequency_(Hz)\tMx_Real\tMx_Imag\tMz_Real\tMz_Imag\n'
+                               f'Drive_Frequency={drive_freq:.6e}\n'
+                               f'Circuit_Type={sim.circuit_type}')
+                 data_to_save = np.column_stack((
+                     pos_freqs[:min_len],
+                     mx_fft_complex[:min_len].real, mx_fft_complex[:min_len].imag,
+                     mz_fft_complex[:min_len].real, mz_fft_complex[:min_len].imag
+                 ))
+                 np.savetxt(numeric_data_path_full, data_to_save, header=header_str, fmt='%.6e', delimiter='\t', comments='# ')
+            else:
+                 # Create an empty file with header if no data
+                 with open(numeric_data_path_full, 'w') as f:
+                     f.write(f'# No valid FFT data generated\n'
+                             f'# Drive_Frequency={drive_freq:.6e}\n'
+                             f'# Circuit_Type={sim.circuit_type}\n')
+        except Exception as e:
+            print(f"Error saving numeric FFT data {numeric_data_path_full}: {e}")
+            traceback.print_exc()
+
+        print(f"Summary and FFT data saved with base filename: {base_filename}")
+        return base_filename
+
+
+# --- Helper function for safe formatting ---
+# (Already defined above, no need to redefine)
+
+# === Main Simulation Runner (MODIFIED) ===
+
+def run_single_simulation(params, run_figures_path, run_results_path, run_numeric_data_path):
+    """
+    Runs a single simulation instance with given parameters and saves
+    output to the specified paths. Includes linear and log frequency comb analysis.
+    MODIFIED: Handles new GFC parameters and log comb analysis.
+    """
+    # Extract parameters (unchanged)
+    circuit_type = params.get('circuit_type', 'graphene_fc'); static_bias = params.get('static_bias_strength', 0.0)
+    num_steps = params.get('num_steps', 500); num_qubits = params.get('num_qubits', 10)
+    # Get circuit-specific parameters (unchanged)
+    interaction_angle = params.get('interaction_angle', np.pi/4)
+    twistor_angle = params.get('twistor_angle', np.pi/6)
+    chirality_angle = params.get('chirality_angle', 0.0)
+    symmetry_breaking_strength = params.get('symmetry_breaking_strength', 0.0)
+    # Get NEW parameters (unchanged)
+    three_body_interaction_angle = params.get('three_body_interaction_angle', 0.0)
+    symmetry_pattern_type = params.get('symmetry_pattern_type', 'sinusoidal')
+    chirality_modulation_strength = params.get('chirality_modulation_strength', 0.0)
+
+
+    # Safely format parameters for print statement (unchanged)
+    j_str = format_param(params.get('J', 'N/A'), '.2f'); h1_str = format_param(params.get('h1', 'N/A'), '.2f')
+    omega_ratio_str = format_param(params.get('omega_ratio', 'N/A'), '.3f'); bias_str = format_param(static_bias, '.3f')
+    interact_str = format_param(interaction_angle, '.3f')
+    twistor_str = format_param(twistor_angle, '.3f')
+    chiral_str = format_param(chirality_angle, '.3f')
+    sym_break_str = format_param(symmetry_breaking_strength, '.3f')
+    # Format NEW parameters (unchanged)
+    three_body_str = format_param(three_body_interaction_angle, '.3f')
+    chiral_mod_str = format_param(chirality_modulation_strength, '.3f')
+
+
+    # Update print statement to include all relevant parameters (unchanged)
+    print_str = (f"Running: Circ={circuit_type}, Q={num_qubits}, J={j_str}, h1={h1_str}, ωr={omega_ratio_str}, Bias={bias_str}, ")
+    if circuit_type == 'comb_generator': print_str += f"Interact={interact_str}, "
+    if circuit_type == 'comb_twistor': print_str += f"Interact={interact_str}, Twist={twistor_str}, Chiral={chiral_str}, "
+    if circuit_type == 'graphene_fc': print_str += (f"InteractNN={interact_str}, ChiralNNN={chiral_str}, ChiralMod={chiral_mod_str}, "
+                                                   f"3Body={three_body_str}, SymBreak={sym_break_str}, SymPatt='{symmetry_pattern_type}', ")
+    print_str += f"Steps={num_steps}"
+    print(print_str)
+
+
+    base_filename = None; summary_data = None; simulator = None # Initialize simulator
+    try:
+        # Instantiate simulator with all potentially relevant parameters (unchanged)
+        simulator = QuantumCircuitSimulator(
+            num_qubits=num_qubits, num_shots=params.get('num_shots', 1024),
+            J=params.get('J', 1.2), h0=params.get('h0', 0.15), h1=params.get('h1', 0.9),
+            omega_ratio=params.get('omega_ratio', 0.38),
+            spatial_mod=params.get('spatial_mod', 0.7), mod_period=params.get('mod_period', 3),
+            wavelet_type=params.get('wavelet_type', 'cmor1.5-1.0'),
+            static_bias_strength=static_bias, circuit_type=circuit_type,
+            interaction_angle=interaction_angle,
+            twistor_angle=twistor_angle,
+            chirality_angle=chirality_angle,
+            symmetry_breaking_strength=symmetry_breaking_strength,
+            # Pass NEW parameters
+            three_body_interaction_angle=three_body_interaction_angle,
+            symmetry_pattern_type=symmetry_pattern_type,
+            chirality_modulation_strength=chirality_modulation_strength
+        )
+
+        # Print circuit diagram once per run group (or less frequently if desired)
+        # For now, printing it every time to see the effect of parameters
+        print("--- Circuit Diagram ---");
+        try: print(simulator.circuit.draw(output='text', fold=-1))
+        except TypeError: print(simulator.circuit.draw(output='text')) # Older Qiskit fallback
+        print("-----------------------")
+
+        # Run evolution
+        results = simulator.run_time_evolution(num_steps=num_steps, time_step=params.get('time_step', 0.1))
+        if results is None: raise RuntimeError("Time evolution failed.")
+
+        # Perform Analyses
+        analysis = simulator.analyze_time_crystal(results, transient_fraction=0.2)
+        spatial_fc_analysis = simulator.analyze_spatial_frequency_patterns(results)
+        analysis['spatial_frequency_crystal'] = spatial_fc_analysis # Store spatial results within main analysis dict
+        fc_fft_analysis = analyze_fft_peaks_for_fc(analysis, peak_height_threshold=0.05)
+        fc_comb_analysis = analyze_frequency_comb(analysis, fc_fft_analysis)
+        # <<< LOG COMB MODIFICATION >>> Call log comb analysis
+        log_fc_comb_analysis = analyze_logarithmic_frequency_comb(analysis)
+
+        penrose_comb_analysis_mx = analyze_comb_penrose_median(
+            analysis,
+            basis='mx',
+            peak_height_threshold=0.1, # Adjust as needed
+            window_delta_factor=0.2,   # Adjust as needed
+            min_comb_teeth=3,
+            kernel_params={'alpha': 0.1} # Example kernel params - REPLACE KERNEL
+        )
+        penrose_comb_analysis_mz = analyze_comb_penrose_median(
+            analysis,
+            basis='mz',
+            peak_height_threshold=0.1,
+            window_delta_factor=0.2,
+            min_comb_teeth=3,
+            kernel_params={'alpha': 0.1} # Example kernel params - REPLACE KERNEL
+        )
+
+        # Combine results (optional, or keep separate)
+        analysis['penrose_comb_mx'] = penrose_comb_analysis_mx
+        analysis['penrose_comb_mz'] = penrose_comb_analysis_mz
+
+        # Generate Filename (unchanged)
+        timestamp = datetime.datetime.now().strftime("%H%M%S")
+        param_info = (f"circ{circuit_type[:3]}_q{simulator.num_qubits}_J{j_str}_h1{h1_str}_" # Shorten circ name
+                      f"wr{omega_ratio_str}_bias{bias_str}_")
+        if circuit_type == 'comb_generator': param_info += f"int{interact_str}_"
+        if circuit_type == 'comb_twistor': param_info += f"int{interact_str}_tw{twistor_str}_ch{chiral_str}_"
+        if circuit_type == 'graphene_fc': param_info += (f"int{interact_str}_ch{chiral_str}_chM{chiral_mod_str}_" # Added ChiralMod
+                                                       f"3B{three_body_str}_sym{sym_break_str}_symP{symmetry_pattern_type[:3]}_") # Added 3B, SymPatt
+        param_info += f"s{num_steps}"
+        base_filename = f"run_{param_info.replace('/', '-').replace(' ','')}_{timestamp}"
+
+        # Save Results & Visualize
+        # <<< LOG COMB MODIFICATION >>> Pass log comb results to save/visualize
+        simulator.save_results(results, analysis, fc_fft_analysis, fc_comb_analysis, log_fc_comb_analysis, base_filename, run_results_path, run_numeric_data_path)
+        simulator.visualize_fft_for_scan(analysis, fc_fft_analysis, fc_comb_analysis, log_fc_comb_analysis, base_filename, run_figures_path)
+
+        # --- Extract summary metrics for the scan table ---
+        incomm_count = fc_fft_analysis.get('incommensurate_peak_count', 0)
+        # Mx Linear Comb Metrics
+        mx_lin_comb_found = fc_comb_analysis.get('mx_comb_found', False)
+        mx_lin_comb_omega = fc_comb_analysis.get('mx_best_omega', 0)
+        mx_lin_comb_theta = fc_comb_analysis.get('mx_mean_theta', 0)
+        mx_lin_phase_dev = fc_comb_analysis.get('mx_phase_step_std_dev', float('inf'))
+        mx_lin_amp_dev = fc_comb_analysis.get('mx_amp_rel_std_dev', float('inf'))
+        mx_lin_score = fc_comb_analysis.get('mx_best_comb_score', float('inf'))
+        mx_lin_num_teeth = fc_comb_analysis.get('mx_num_teeth', 0)
+        mx_lin_omega_dev = fc_comb_analysis.get('mx_omega_dev', float('inf'))
+        # Mz Linear Comb Metrics
+        mz_lin_comb_found = fc_comb_analysis.get('mz_comb_found', False)
+        mz_lin_comb_omega = fc_comb_analysis.get('mz_best_omega', 0)
+        mz_lin_comb_theta = fc_comb_analysis.get('mz_mean_theta', 0)
+        mz_lin_phase_dev = fc_comb_analysis.get('mz_phase_step_std_dev', float('inf'))
+        mz_lin_amp_dev = fc_comb_analysis.get('mz_amp_rel_std_dev', float('inf'))
+        mz_lin_score = fc_comb_analysis.get('mz_best_comb_score', float('inf'))
+        mz_lin_num_teeth = fc_comb_analysis.get('mz_num_teeth', 0)
+        mz_lin_omega_dev = fc_comb_analysis.get('mz_omega_dev', float('inf'))
+
+        # <<< LOG COMB MODIFICATION START >>> Extract Log Comb Metrics
+        # Mx Log Comb Metrics
+        mx_log_comb_found = log_fc_comb_analysis.get('mx_log_comb_found', False)
+        mx_log_comb_R = log_fc_comb_analysis.get('mx_best_R', 0)
+        mx_log_comb_theta = log_fc_comb_analysis.get('mx_log_mean_theta', 0)
+        mx_log_phase_dev = log_fc_comb_analysis.get('mx_log_phase_step_std_dev', float('inf'))
+        mx_log_amp_dev = log_fc_comb_analysis.get('mx_log_amp_rel_std_dev', float('inf'))
+        mx_log_score = log_fc_comb_analysis.get('mx_log_best_comb_score', float('inf'))
+        mx_log_num_teeth = log_fc_comb_analysis.get('mx_log_num_teeth', 0)
+        mx_log_R_dev = log_fc_comb_analysis.get('mx_log_R_dev', float('inf'))
+        # Mz Log Comb Metrics
+        mz_log_comb_found = log_fc_comb_analysis.get('mz_log_comb_found', False)
+        mz_log_comb_R = log_fc_comb_analysis.get('mz_best_R', 0)
+        mz_log_comb_theta = log_fc_comb_analysis.get('mz_log_mean_theta', 0)
+        mz_log_phase_dev = log_fc_comb_analysis.get('mz_log_phase_step_std_dev', float('inf'))
+        mz_log_amp_dev = log_fc_comb_analysis.get('mz_log_amp_rel_std_dev', float('inf'))
+        mz_log_score = log_fc_comb_analysis.get('mz_log_best_comb_score', float('inf'))
+        mz_log_num_teeth = log_fc_comb_analysis.get('mz_log_num_teeth', 0)
+        mz_log_R_dev = log_fc_comb_analysis.get('mz_log_R_dev', float('inf'))
+        # <<< LOG COMB MODIFICATION END >>>
+
+        # Determine simulation dtype for summary
+        sim_dtype = 'statevector' if simulator.num_qubits <= 8 else 'aer_shots'
+
+        # Populate summary data dictionary including new parameters (MODIFIED)
+        summary_data = {
+            "Filename": base_filename, "Circuit": circuit_type, "Qubits": simulator.num_qubits,
+            "J": params.get('J', 'N/A'), "h1": params.get('h1', 'N/A'), "omega_ratio": params.get('omega_ratio', 'N/A'), "Bias": static_bias,
+            # GFC/Comb Params
+            "InteractAngle": interaction_angle if circuit_type in ['comb_generator','comb_twistor', 'graphene_fc'] else 'N/A',
+            "ChiralityAngle": chirality_angle if circuit_type in ['comb_twistor', 'graphene_fc'] else 'N/A',
+            "SymmetryBreakStrength": symmetry_breaking_strength if circuit_type == 'graphene_fc' else 'N/A',
+            # Twistor Params
+            "TwistorAngle": twistor_angle if circuit_type == 'comb_twistor' else 'N/A',
+            # NEW GFC Params
+            "ThreeBodyAngle": three_body_interaction_angle if circuit_type == 'graphene_fc' else 'N/A',
+            "SymmetryPattern": symmetry_pattern_type if circuit_type == 'graphene_fc' else 'N/A',
+            "ChiralityModStrength": chirality_modulation_strength if circuit_type == 'graphene_fc' else 'N/A',
+            # Simulation & Analysis Params
+            "Steps": num_steps, "dtype": sim_dtype,
+            "TC_X": analysis.get('mx_exact_subharmonic', False), "TC_Z": analysis.get('mz_exact_subharmonic', False),
+            "FC_Spatial": spatial_fc_analysis.get('score', 0), "FC_Incomm": incomm_count,
+            # Mx Linear Comb Data
+            "LinComb_Mx": mx_lin_comb_found,
+            "Omega_Mx": mx_lin_comb_omega if mx_lin_comb_found else 0,
+            "LinTheta_Mx": mx_lin_comb_theta if mx_lin_comb_found else 0,
+            "LinPhaseDevMx": mx_lin_phase_dev if mx_lin_comb_found else float('inf'),
+            "LinAmpDevMx": mx_lin_amp_dev if mx_lin_comb_found else float('inf'),
+            "LinScoreMx": mx_lin_score if mx_lin_comb_found else float('inf'),
+            "LinNumTeethMx": mx_lin_num_teeth if mx_lin_comb_found else 0,
+            "OmegaDevMx": mx_lin_omega_dev if mx_lin_comb_found else float('inf'),
+            # Mz Linear Comb Data
+            "LinComb_Mz": mz_lin_comb_found,
+            "Omega_Mz": mz_lin_comb_omega if mz_lin_comb_found else 0,
+            "LinTheta_Mz": mz_lin_comb_theta if mz_lin_comb_found else 0,
+            "LinPhaseDevMz": mz_lin_phase_dev if mz_lin_comb_found else float('inf'),
+            "LinAmpDevMz": mz_lin_amp_dev if mz_lin_comb_found else float('inf'),
+            "LinScoreMz": mz_lin_score if mz_lin_comb_found else float('inf'),
+            "LinNumTeethMz": mz_lin_num_teeth if mz_lin_comb_found else 0,
+            "OmegaDevMz": mz_lin_omega_dev if mz_lin_comb_found else float('inf'),
+            # <<< LOG COMB MODIFICATION START >>> Add Log Comb Data
+            # Mx Log Comb Data
+            "LogComb_Mx": mx_log_comb_found,
+            "R_Mx": mx_log_comb_R if mx_log_comb_found else 0,
+            "LogTheta_Mx": mx_log_comb_theta if mx_log_comb_found else 0,
+            "LogPhaseDevMx": mx_log_phase_dev if mx_log_comb_found else float('inf'),
+            "LogAmpDevMx": mx_log_amp_dev if mx_log_comb_found else float('inf'),
+            "LogScoreMx": mx_log_score if mx_log_comb_found else float('inf'),
+            "LogNumTeethMx": mx_log_num_teeth if mx_log_comb_found else 0,
+            "RDevMx": mx_log_R_dev if mx_log_comb_found else float('inf'),
+            # Mz Log Comb Data
+            "LogComb_Mz": mz_log_comb_found,
+            "R_Mz": mz_log_comb_R if mz_log_comb_found else 0,
+            "LogTheta_Mz": mz_log_comb_theta if mz_log_comb_found else 0,
+            "LogPhaseDevMz": mz_log_phase_dev if mz_log_comb_found else float('inf'),
+            "LogAmpDevMz": mz_log_amp_dev if mz_log_comb_found else float('inf'),
+            "LogScoreMz": mz_log_score if mz_log_comb_found else float('inf'),
+            "LogNumTeethMz": mz_log_num_teeth if mz_log_comb_found else 0,
+            "RDevMz": mz_log_R_dev if mz_log_comb_found else float('inf'),
+            # <<< LOG COMB MODIFICATION END >>>
+            "Status": "OK"
+        }
+        print(f"Finished run {base_filename}. LinComb Mx: {mx_lin_comb_found} ({mx_lin_num_teeth} teeth), Mz: {mz_lin_comb_found} ({mz_lin_num_teeth} teeth). LogComb Mx: {mx_log_comb_found} ({mx_log_num_teeth} teeth), Mz: {mz_log_comb_found} ({mz_log_num_teeth} teeth)") # <<< LOG COMB MODIFICATION >>> Updated print
+        return base_filename, summary_data
+
+    except Exception as e:
+        print(f"!!! Error during simulation for parameters {params}: {e} !!!")
+        if base_filename: print(f"    (Occurred for run base filename attempt: {base_filename})")
+        print(traceback.format_exc())
+        # Determine simulation dtype even in failure if possible
+        sim_dtype_fail = 'unknown'
+        if simulator: # Check if simulator object was created
+            sim_dtype_fail = 'statevector' if simulator.num_qubits <= 8 else 'aer_shots'
+
+        # Populate failure summary data including new parameters (MODIFIED)
+        summary_data = {
+            "Filename": base_filename if base_filename else "FAILED_RUN", "Circuit": circuit_type, "Qubits": num_qubits,
+            "J": params.get('J', 'N/A'), "h1": params.get('h1', 'N/A'), "omega_ratio": params.get('omega_ratio', 'N/A'), "Bias": static_bias,
+            # GFC/Comb Params
+            "InteractAngle": interaction_angle if circuit_type in ['comb_generator','comb_twistor', 'graphene_fc'] else 'N/A',
+            "ChiralityAngle": chirality_angle if circuit_type in ['comb_twistor', 'graphene_fc'] else 'N/A',
+            "SymmetryBreakStrength": symmetry_breaking_strength if circuit_type == 'graphene_fc' else 'N/A',
+            # Twistor Params
+            "TwistorAngle": twistor_angle if circuit_type == 'comb_twistor' else 'N/A',
+            # NEW GFC Params
+            "ThreeBodyAngle": three_body_interaction_angle if circuit_type == 'graphene_fc' else 'N/A',
+            "SymmetryPattern": symmetry_pattern_type if circuit_type == 'graphene_fc' else 'N/A',
+            "ChiralityModStrength": chirality_modulation_strength if circuit_type == 'graphene_fc' else 'N/A',
+            # Simulation & Analysis Params
+            "Steps": num_steps, "dtype": sim_dtype_fail,
+            "TC_X": False, "TC_Z": False, "FC_Spatial": -1.0, "FC_Incomm": -1,
+            # Linear Comb Failure Data
+            "LinComb_Mx": False, "Omega_Mx": 0, "LinTheta_Mx": 0, "LinPhaseDevMx": float('inf'), "LinAmpDevMx": float('inf'), "LinScoreMx": float('inf'), "LinNumTeethMx": 0, "OmegaDevMx": float('inf'),
+            "LinComb_Mz": False, "Omega_Mz": 0, "LinTheta_Mz": 0, "LinPhaseDevMz": float('inf'), "LinAmpDevMz": float('inf'), "LinScoreMz": float('inf'), "LinNumTeethMz": 0, "OmegaDevMz": float('inf'),
+            # <<< LOG COMB MODIFICATION START >>> Add Log Comb Failure Data
+            "LogComb_Mx": False, "R_Mx": 0, "LogTheta_Mx": 0, "LogPhaseDevMx": float('inf'), "LogAmpDevMx": float('inf'), "LogScoreMx": float('inf'), "LogNumTeethMx": 0, "RDevMx": float('inf'),
+            "LogComb_Mz": False, "R_Mz": 0, "LogTheta_Mz": 0, "LogPhaseDevMz": float('inf'), "LogAmpDevMz": float('inf'), "LogScoreMz": float('inf'), "LogNumTeethMz": 0, "RDevMz": float('inf'),
+            # <<< LOG COMB MODIFICATION END >>>
+            "Status": "Fail"
+        }
+        return None, summary_data
+    finally: plt.close('all') # Ensure plots are closed even on error
+
+
+def setup_output_directories(save_to_drive, drive_mount_point, drive_save_folder, local_results_base):
+    """Sets up the main output directory for the scan run."""
+    # (Implementation unchanged - details omitted for brevity)
+    global FIGURES_BASE_PATH, RESULTS_BASE_PATH, NUMERIC_DATA_BASE_PATH; run_timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S'); top_level_output_dir_base = f'ScanRun_{run_timestamp}'; actual_save_to_drive = save_to_drive
+    if save_to_drive:
+        try: from google.colab import drive; print(f"Attempting to mount Google Drive at {drive_mount_point}..."); drive.mount(drive_mount_point, force_remount=True); print("Google Drive mounted successfully."); gdrive_target_base = os.path.join(drive_mount_point, drive_save_folder); os.makedirs(gdrive_target_base, exist_ok=True); top_level_output_dir = os.path.join(gdrive_target_base, top_level_output_dir_base)
+        except Exception as e: print(f"WARNING: Failed to mount/access Google Drive ({e}). Saving locally."); actual_save_to_drive = False; top_level_output_dir = os.path.join(local_results_base, top_level_output_dir_base)
+    else: top_level_output_dir = os.path.join(local_results_base, top_level_output_dir_base)
+    try: os.makedirs(top_level_output_dir, exist_ok=True); run_figures_path = os.path.join(top_level_output_dir, 'figures'); run_results_path = os.path.join(top_level_output_dir, 'results'); run_numeric_data_path = os.path.join(top_level_output_dir, 'numeric_data'); os.makedirs(run_figures_path, exist_ok=True); os.makedirs(run_results_path, exist_ok=True); os.makedirs(run_numeric_data_path, exist_ok=True); print(f"Output for this scan run will be saved to subfolders within: {top_level_output_dir}"); FIGURES_BASE_PATH = run_figures_path; RESULTS_BASE_PATH = run_results_path; NUMERIC_DATA_BASE_PATH = run_numeric_data_path; return top_level_output_dir, run_figures_path, run_results_path, run_numeric_data_path, actual_save_to_drive
+    except Exception as e: print(f"FATAL ERROR: Could not create output directories in {top_level_output_dir}: {e}\nExiting."); return None, None, None, None, actual_save_to_drive
+
+
+def save_scan_summary(all_scan_results, top_level_output_dir, run_timestamp):
+    """Prints and saves the combined summary table for the parameter scan. (MODIFIED)"""
+    print("\n" + "=" * 80 + "\nCombined Parameter Scan Summary\n" + "=" * 80) # Increased width
+    if all_scan_results:
+        summary_df = pd.DataFrame(all_scan_results)
+        # Format boolean columns for display
+        # <<< LOG COMB MODIFICATION >>> Added log comb bool cols
+        bool_cols = ['TC_X', 'TC_Z', 'LinComb_Mx', 'LinComb_Mz', 'LogComb_Mx', 'LogComb_Mz']
+        for col in bool_cols:
+             if col in summary_df.columns: summary_df[col] = summary_df[col].map({True: 'Yes', False: 'No', -1: 'Fail', 'Fail': 'Fail'}).fillna('N/A')
+
+        # Define float columns for formatting, including new ones (MODIFIED)
+        # <<< LOG COMB MODIFICATION >>> Added log comb float cols
+        float_cols = ['J', 'h1', 'omega_ratio', 'Bias',
+                      'InteractAngle', 'TwistorAngle', 'ChiralityAngle',
+                      'SymmetryBreakStrength',
+                      'ThreeBodyAngle',
+                      'ChiralityModStrength',
+                      'FC_Spatial',
+                      # Linear Comb
+                      'Omega_Mx', 'Omega_Mz', 'LinTheta_Mx', 'LinTheta_Mz',
+                      'LinPhaseDevMx', 'LinAmpDevMx', 'LinScoreMx', 'OmegaDevMx',
+                      'LinPhaseDevMz', 'LinAmpDevMz', 'LinScoreMz', 'OmegaDevMz',
+                      # Log Comb
+                      'R_Mx', 'R_Mz', 'LogTheta_Mx', 'LogTheta_Mz',
+                      'LogPhaseDevMx', 'LogAmpDevMx', 'LogScoreMx', 'RDevMx',
+                      'LogPhaseDevMz', 'LogAmpDevMz', 'LogScoreMz', 'RDevMz'
+                      ]
+
+        summary_df_display = summary_df.copy()
+        # Format float columns for display
+        for col in float_cols:
+            if col in summary_df_display.columns:
+                 # Convert to numeric, coercing errors (like 'N/A') to NaN
+                 summary_df_display[col] = pd.to_numeric(summary_df_display[col], errors='coerce')
+                 # Apply formatting function
+                 summary_df_display[col] = summary_df_display[col].apply(
+                     lambda x: (f"{x:.3f}" if pd.notnull(x) and np.isfinite(x) and x != -1.0 else # Format finite numbers (not -1)
+                                ('Fail' if x == -1.0 else # Handle -1 specifically
+                                 ('Inf' if x == float('inf') else # Handle infinity
+                                  'N/A'))) # Handle NaN or other non-numeric
+                 )
+
+        # Define display columns including new comb metrics, angles, and dtype (MODIFIED)
+        # <<< LOG COMB MODIFICATION >>> Added log comb display cols
+        display_cols = ["ScanGroup", "Circuit", "Qubits", "J", "h1", "omega_ratio", "Bias",
+                        "InteractAngle", "TwistorAngle", "ChiralityAngle",
+                        "SymmetryBreakStrength",
+                        "ThreeBodyAngle",
+                        "SymmetryPattern",
+                        "ChiralityModStrength",
+                        "Steps", "dtype",
+                        "TC_X", "TC_Z", "FC_Spatial", "FC_Incomm",
+                        # Linear Comb Mx
+                        "LinComb_Mx", "Omega_Mx", "LinTheta_Mx", "LinPhaseDevMx", "LinAmpDevMx", "LinScoreMx", "LinNumTeethMx", "OmegaDevMx",
+                        # Linear Comb Mz
+                        "LinComb_Mz", "Omega_Mz", "LinTheta_Mz", "LinPhaseDevMz", "LinAmpDevMz", "LinScoreMz", "LinNumTeethMz", "OmegaDevMz",
+                        # Log Comb Mx
+                        "LogComb_Mx", "R_Mx", "LogTheta_Mx", "LogPhaseDevMx", "LogAmpDevMx", "LogScoreMx", "LogNumTeethMx", "RDevMx",
+                        # Log Comb Mz
+                        "LogComb_Mz", "R_Mz", "LogTheta_Mz", "LogPhaseDevMz", "LogAmpDevMz", "LogScoreMz", "LogNumTeethMz", "RDevMz",
+                        "Status", "Filename"]
+
+        # Ensure only existing columns are selected for display
+        display_cols = [col for col in display_cols if col in summary_df_display.columns]
+        # Set pandas display options for better console output
+        pd.set_option('display.max_rows', None); pd.set_option('display.max_columns', None); pd.set_option('display.width', 1000); pd.set_option('display.colheader_justify', 'center') # Increased width further
+        # Print the formatted summary table
+        print(summary_df_display[display_cols].to_string(index=False))
+
+        # Save summary to CSV using the original (unformatted) data
+        summary_csv_path = os.path.join(top_level_output_dir, f"scan_summary_combined_{run_timestamp}.csv")
+        try:
+             summary_df_to_save = pd.DataFrame(all_scan_results) # Use original data
+             if 'Status' not in summary_df_to_save.columns: summary_df_to_save['Status'] = 'OK' # Ensure Status column exists
+             # Select columns to save (same as display columns, but from original data)
+             save_cols = [col for col in display_cols if col in summary_df_to_save.columns]
+             summary_df_to_save[save_cols].to_csv(summary_csv_path, index=False, float_format='%.5f') # Save with float precision
+             print(f"\nCombined scan summary saved to: {summary_csv_path}")
+        except Exception as e: print(f"\nError saving combined scan summary CSV: {e}")
+    else: print("No successful simulation runs completed in the scan.")
+    print("=" * 80) # Increased width
+
+
+def main():
+    """Runs the simulation, potentially scanning parameters and circuit types."""
+    # Setup output directories (local or Google Drive)
+    top_level_output_dir, run_figures_path, run_results_path, run_numeric_data_path, drive_active = setup_output_directories(
+        SAVE_TO_GOOGLE_DRIVE, GDRIVE_MOUNT_POINT, GDRIVE_SAVE_FOLDER, RESULTS_BASE_PATH
+    )
+    if top_level_output_dir is None: return # Exit if directory setup failed
+
+    # --- Parameter Scan Setup ---
+    # Define common parameters used across different scans unless overridden
+    common_params = {
+        'num_qubits': 10, 'num_steps': 200, 'time_step': 0.1, 'num_shots': 1024,
+        'h0': 0.15, # Used only by 'penrose'
+        'spatial_mod': 0.7, 'mod_period': 3, # Relevant for 'penrose'
+        'wavelet_type': 'cmor1.5-1.0',
+        # Defaults if not specified in scan:
+        'interaction_angle': np.pi/4, # NN for comb*, gfc
+        'twistor_angle': np.pi/6, # For comb_twistor
+        'chirality_angle': 0.0, # NNN base for comb_twistor, gfc
+        'symmetry_breaking_strength': 0.0, # Base for gfc
+        'static_bias_strength': 0.0, # Common optional bias
+        # NEW GFC Defaults
+        'three_body_interaction_angle': 0.0,
+        'symmetry_pattern_type': 'sinusoidal',
+        'chirality_modulation_strength': 0.0
+        }
+
+    # Define the list of parameter scans to perform
+    scan_list = [
+        # Scan 1: Explore the modified Graphene FC model
+        {'scan_name': 'gfc_mod_exploration',
+         'params': {
+             'circuit_type': ['graphene_fc'],
+             'num_qubits': [10],
+             'h1': [0.8], # Fixed drive amplitude
+             'omega_ratio': [0.3], # Scan drive frequency ratio
+             'interaction_angle': [np.pi/4], # Fixed NN interaction
+             'chirality_angle': [np.pi/10], # Fixed NNN base interaction
+             'chirality_modulation_strength': [0.2], # Scan NNN modulation
+             'three_body_interaction_angle': [0.0], # Scan 3-body interaction
+             'symmetry_breaking_strength': [0.3], # Fixed symmetry breaking base strength
+             'symmetry_pattern_type': ['piecewise'], # Scan symmetry pattern
+             }
+         },
+    ]
+
+    print(f"\nStarting Quantum Simulation Parameter Scan...");
+    print(f"Common parameters base: {common_params}"); print(f"Scanning {len(scan_list)} parameter groups.")
+    # Calculate total expected runs
+    total_runs_expected = sum(np.prod([len(v) for v in scan['params'].values()]) for scan in scan_list); print(f"Total simulation runs planned: {total_runs_expected}"); print("-" * 60)
+
+    all_scan_summary_results = []; run_counter = 0
+    # Iterate through each scan group defined in scan_list
+    for scan_config in scan_list:
+        scan_name = scan_config['scan_name']; param_scan_settings = scan_config['params']; param_names = list(param_scan_settings.keys()); param_value_lists = list(param_scan_settings.values()); parameter_combinations = list(itertools.product(*param_value_lists)) # Generate all combinations for this scan
+        print(f"\n=== Starting Scan Group: {scan_name} ({len(parameter_combinations)} combinations) ===")
+        # Iterate through each parameter combination within the scan group
+        for i, combo in enumerate(parameter_combinations):
+            run_counter += 1; print(f"\n--- Running {run_counter}/{total_runs_expected} (Scan: {scan_name}, Combo {i+1}/{len(parameter_combinations)}) ---")
+            # Create parameters for this specific run, starting with common params and updating with the current combo
+            current_params = common_params.copy(); current_params.update(dict(zip(param_names, combo)))
+            # Run the simulation with the current parameters
+            base_filename, summary_data = run_single_simulation(current_params, run_figures_path, run_results_path, run_numeric_data_path)
+            # If the simulation was successful (returned summary data), add it to the list
+            if summary_data:
+                summary_data['ScanGroup'] = scan_name # Add the scan group name to the summary
+                all_scan_summary_results.append(summary_data)
+            plt.close('all') # Close any open matplotlib figures to save memory
+
+    # After all scans are complete, print and save the combined summary
+    run_timestamp_str = os.path.basename(top_level_output_dir).split('_')[-1] # Get timestamp from directory name
+    save_scan_summary(all_scan_summary_results, top_level_output_dir, run_timestamp_str)
+    print(f"Parameter scan finished. Results saved in: {top_level_output_dir}\n" + "=" * 80) # Increased width
+
+if __name__ == "__main__":
+    main()
