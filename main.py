@@ -22,7 +22,7 @@ def main():
     print("Note: Some features may be limited based on available packages")
     
     # Default parameters
-    circuit_type = 'penrose'  # Options: 'penrose', 'qft_basic', 'comb_generator', 'comb_twistor', 'graphene_fc'
+    circuit_type = 'graphene_fc'  # Options: 'penrose', 'qft_basic', 'comb_generator', 'comb_twistor', 'graphene_fc'
     qubits = 3
     shots = 8192
     drive_steps = 5

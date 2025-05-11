@@ -12,6 +12,9 @@ dependencies = [
     "numpy>=2.2.5",
     "pandas>=2.2.3",
     "psycopg2-binary>=2.9.10",
+    "pywavelets>=1.8.0",
+    "qiskit-aer>=0.17.0",
     "qiskit>=2.0.0",
     "scipy>=1.15.3",
+    "pylatexenc>=2.10",
 ]
