@@ -29,7 +29,7 @@ def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
                   time_points=100, max_time=10.0, drive_param=0.9,
                   init_state='superposition', param_set_name='default',
                   save_results=True, show_plots=False, aer_method='statevector',
-                  plot_circuit=True, verbose=True):
+                  plot_circuit=True, verbose=True, progress_callback=None):
     """
     Run a single quantum simulation with specified parameters.
     
@@ -48,6 +48,7 @@ def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
         aer_method (str): Simulation method ('statevector', 'matrix_product_state', etc)
         plot_circuit (bool): Whether to plot the circuit diagram
         verbose (bool): Whether to print progress messages
+        progress_callback (function): Optional callback function for progress updates (step, total)
     
     Returns:
         dict: Results of the simulation, including analysis
@@ -115,6 +116,10 @@ def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
         print(f"Starting simulation across {time_points} time points...")
     
     for i, time_val in enumerate(times):
+        # Report progress via callback if provided
+        if progress_callback is not None:
+            progress_callback(i, time_points)
+        
         # Handle different versions of parameter binding API
         try:
             if hasattr(circuit, 'assign_parameters'):

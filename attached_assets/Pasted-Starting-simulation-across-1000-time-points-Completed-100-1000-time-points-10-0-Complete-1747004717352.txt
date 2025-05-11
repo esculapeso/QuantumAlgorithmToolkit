@@ -1,0 +1,62 @@
+Starting simulation across 1000 time points...
+  Completed 100/1000 time points (10.0%)
+  Completed 200/1000 time points (20.0%)
+[2025-05-11 23:00:56 +0000] [6344] [CRITICAL] WORKER TIMEOUT (pid:6598)
+[2025-05-11 23:00:56 +0000] [6598] [ERROR] Error handling request /run_simulation
+Traceback (most recent call last):
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/gunicorn/workers/sync.py", line 134, in handle
+    self.handle_request(listener, req, client, addr)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/gunicorn/workers/sync.py", line 177, in handle_request
+    respiter = self.wsgi(environ, resp.start_response)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 1536, in __call__
+    return self.wsgi_app(environ, start_response)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/main.py", line 64, in run_sim
+    result = run_simulation(
+             ^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/simulation.py", line 136, in run_simulation
+    transpiled_circuit = transpile(bound_circuit, simulator)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/qiskit/compiler/transpiler.py", line 291, in transpile
+    out_circuits = pm.run(circuits, callback=callback, num_processes=num_processes)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/qiskit/transpiler/passmanager.py", line 451, in run
+    return super().run(circuits, output_name, callback, num_processes=num_processes)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/qiskit/transpiler/passmanager.py", line 474, in wrapper
+    return meth(*meth_args, **meth_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/qiskit/transpiler/passmanager.py", line 233, in run
+    return super().run(
+           ^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/qiskit/passmanager/passmanager.py", line 237, in run
+    out = [
+          ^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/qiskit/passmanager/passmanager.py", line 238, in <listcomp>
+    _run_workflow(
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/qiskit/passmanager/passmanager.py", line 312, in _run_workflow
+    passmanager_ir, final_state = flow_controller.execute(
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/qiskit/passmanager/base_tasks.py", line 218, in execute
+    passmanager_ir, state = next_task.execute(
+                            ^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/qiskit/passmanager/base_tasks.py", line 108, in execute
+    running_time = time.time() - start_time
+                   ^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2025-05-11 23:00:56 +0000] [6598] [INFO] Worker exiting (pid: 6598)
+[2025-05-11 23:00:56 +0000] [6640] [INFO] Booting worker with pid: 6640
+^C[2025-05-11 23:04:48 +0000] [6344] [INFO] Handling signal: int
+[2025-05-11 23:04:49 +0000] [6344] [INFO] Shutting down: Master

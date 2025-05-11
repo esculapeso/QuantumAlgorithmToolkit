@@ -25,7 +25,10 @@
                                 <label for="qubits" class="form-label">Number of Qubits</label>
                                 <input type="number" class="form-control" id="qubits" name="qubits" 
                                        min="1" max="10" value="3" required>
-                                <div class="form-text">More qubits = more complex simulation (3-6 recommended)</div>
+                                <div class="form-text">
+                                    More qubits = more complex simulation
+                                    <span class="text-warning">(>5 will run in background)</span>
+                                </div>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -62,8 +65,11 @@
                             <div class="mb-3">
                                 <label for="time_points" class="form-label">Time Points</label>
                                 <input type="number" class="form-control" id="time_points" name="time_points" 
-                                       min="10" max="1000" value="100" required>
-                                <div class="form-text">Number of simulation time points</div>
+                                       min="10" max="5000" value="100" required>
+                                <div class="form-text">
+                                    Number of simulation time points 
+                                    <span class="text-warning">(>500 will run in background)</span>
+                                </div>
                             </div>
                         </div>
                         <div class="col-md-6">

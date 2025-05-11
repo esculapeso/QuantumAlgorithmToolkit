@@ -45,6 +45,14 @@ def index():
                           circuit_types=circuit_types,
                           default_params=config.DEFAULT_SIMULATION_PARAMS)
 
+import threading
+import uuid
+import time
+import json
+
+# Dictionary to store background simulation status
+BACKGROUND_SIMULATIONS = {}
+
 @app.route('/run_simulation', methods=['POST'])
 def run_sim():
     """Run a simulation with the provided parameters."""
@@ -59,7 +67,48 @@ def run_sim():
         drive_param = float(request.form.get('drive_param', 0.9))
         init_state = request.form.get('init_state', 'superposition')
         
-        # Run the simulation
+        # For simulations with more than 500 time points or more than 5 qubits,
+        # run in background to avoid timeouts
+        if time_points > 500 or qubits > 5:
+            # Generate a unique ID for this simulation
+            sim_id = str(uuid.uuid4())
+            
+            # Create parameter dict for the simulation
+            params = {
+                'circuit_type': circuit_type,
+                'qubits': qubits,
+                'shots': shots,
+                'drive_steps': drive_steps,
+                'time_points': time_points,
+                'max_time': max_time,
+                'drive_param': drive_param,
+                'init_state': init_state,
+                'param_set_name': f"web_{circuit_type}_{qubits}q_{sim_id[:6]}",
+            }
+            
+            # Store simulation status
+            BACKGROUND_SIMULATIONS[sim_id] = {
+                'id': sim_id,
+                'params': params,
+                'status': 'starting',
+                'progress': 0,
+                'start_time': time.time(),
+                'result_path': None,
+                'error': None,
+            }
+            
+            # Start background thread for simulation
+            thread = threading.Thread(
+                target=run_background_simulation,
+                args=(sim_id, params)
+            )
+            thread.daemon = True
+            thread.start()
+            
+            flash(f'Long simulation started in background. You can check its progress on the simulations page.')
+            return redirect(url_for('view_simulations'))
+        
+        # For smaller simulations, run synchronously as before
         param_set_name = f"web_{circuit_type}_{qubits}q"
         result = run_simulation(
             circuit_type=circuit_type,
@@ -91,6 +140,75 @@ def run_sim():
     except Exception as e:
         flash(f'Error running simulation: {str(e)}')
         return redirect(url_for('index'))
+
+def run_background_simulation(sim_id, params):
+    """Run a simulation in the background and update its status."""
+    try:
+        # Update status to running
+        BACKGROUND_SIMULATIONS[sim_id]['status'] = 'running'
+        
+        # Create a progress callback to update progress
+        def progress_callback(step, total):
+            progress = int((step / total) * 100)
+            BACKGROUND_SIMULATIONS[sim_id]['progress'] = progress
+        
+        # Run the simulation with the progress callback
+        result = run_simulation(
+            circuit_type=params['circuit_type'],
+            qubits=params['qubits'],
+            shots=params['shots'],
+            drive_steps=params['drive_steps'],
+            time_points=params['time_points'],
+            max_time=params['max_time'],
+            drive_param=params['drive_param'],
+            init_state=params['init_state'],
+            param_set_name=params['param_set_name'],
+            save_results=True,
+            show_plots=False,
+            plot_circuit=True,
+            verbose=True,
+            progress_callback=progress_callback
+        )
+        
+        # Update simulation status with the result path
+        results_path = result.get('results_path', '')
+        result_name = os.path.basename(results_path) if results_path else None
+        
+        BACKGROUND_SIMULATIONS[sim_id]['status'] = 'completed'
+        BACKGROUND_SIMULATIONS[sim_id]['result_path'] = result_name
+        BACKGROUND_SIMULATIONS[sim_id]['end_time'] = time.time()
+        
+    except Exception as e:
+        # If an error occurs, store it in the simulation status
+        BACKGROUND_SIMULATIONS[sim_id]['status'] = 'error'
+        BACKGROUND_SIMULATIONS[sim_id]['error'] = str(e)
+        BACKGROUND_SIMULATIONS[sim_id]['end_time'] = time.time()
+
+@app.route('/simulations')
+def view_simulations():
+    """View the status of all simulations."""
+    # Sort simulations by start time, most recent first
+    simulations = sorted(
+        BACKGROUND_SIMULATIONS.values(),
+        key=lambda x: x.get('start_time', 0),
+        reverse=True
+    )
+    
+    # Get regular simulation results as well
+    results_dirs = sorted(glob.glob('results/*'), key=os.path.getmtime, reverse=True)
+    recent_results = [os.path.basename(d) for d in results_dirs[:10]]  # Show 10 most recent
+    
+    return render_template('simulations.html',
+                         simulations=simulations,
+                         recent_results=recent_results)
+
+@app.route('/simulation_status/<sim_id>')
+def simulation_status(sim_id):
+    """Get the status of a specific simulation."""
+    if sim_id in BACKGROUND_SIMULATIONS:
+        return jsonify(BACKGROUND_SIMULATIONS[sim_id])
+    else:
+        return jsonify({'error': 'Simulation not found'}), 404
 
 @app.route('/result/<result_name>')
 def view_result(result_name):
