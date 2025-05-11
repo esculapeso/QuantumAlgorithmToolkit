@@ -43,9 +43,16 @@ with app.app_context():
 @app.route('/')
 def index():
     """Render the main page."""
-    # Get a list of recent simulation results
-    results_dirs = sorted(glob.glob('results/*'), key=os.path.getmtime, reverse=True)
-    recent_results = [os.path.basename(d) for d in results_dirs[:10]]  # Show 10 most recent
+    # Get a list of recent simulation results from the database
+    try:
+        from db_utils import get_recent_simulations
+        recent_db_results = get_recent_simulations(limit=10)
+        recent_results = [sim.result_name for sim in recent_db_results]
+    except Exception as e:
+        # Fall back to file system if database fails
+        print(f"Warning: Could not fetch from database: {e}")
+        results_dirs = sorted(glob.glob('results/*'), key=os.path.getmtime, reverse=True)
+        recent_results = [os.path.basename(d) for d in results_dirs[:10]]  # Show 10 most recent
     
     # Available circuit types
     circuit_types = [
@@ -203,20 +210,64 @@ def run_background_simulation(sim_id, params):
 @app.route('/simulations')
 def view_simulations():
     """View the status of all simulations."""
-    # Sort simulations by start time, most recent first
-    simulations = sorted(
-        BACKGROUND_SIMULATIONS.values(),
-        key=lambda x: x.get('start_time', 0),
-        reverse=True
-    )
+    # Get filter parameters
+    circuit_type = request.args.get('circuit_type')
+    min_qubits = request.args.get('min_qubits', type=int)
+    max_qubits = request.args.get('max_qubits', type=int)
+    time_crystal = request.args.get('time_crystal') == 'true'
+    comb_detected = request.args.get('comb_detected') == 'true'
     
-    # Get regular simulation results as well
-    results_dirs = sorted(glob.glob('results/*'), key=os.path.getmtime, reverse=True)
-    recent_results = [os.path.basename(d) for d in results_dirs[:10]]  # Show 10 most recent
+    # Only apply filters if they're provided
+    filters = {}
+    if circuit_type:
+        filters['circuit_type'] = circuit_type
+    if min_qubits is not None:
+        filters['min_qubits'] = min_qubits
+    if max_qubits is not None:
+        filters['max_qubits'] = max_qubits
+    if request.args.get('time_crystal'):
+        filters['time_crystal_detected'] = time_crystal
+    if request.args.get('comb_detected'):
+        filters['comb_detected'] = comb_detected
     
-    return render_template('simulations.html',
-                         simulations=simulations,
-                         recent_results=recent_results)
+    # Get background jobs (in-progress simulations)
+    background_jobs = []
+    for sim_id, sim_data in BACKGROUND_SIMULATIONS.items():
+        background_jobs.append({
+            'id': sim_id,
+            'circuit_type': sim_data['params']['circuit_type'],
+            'qubits': sim_data['params']['qubits'],
+            'time_points': sim_data['params']['time_points'],
+            'status': sim_data['status'],
+            'progress': sim_data['progress'],
+            'is_background_job': True
+        })
+    
+    # Get database results
+    try:
+        from db_utils import search_simulations, get_recent_simulations
+        
+        # Get simulation results
+        if filters:
+            db_simulations = search_simulations(**filters)
+        else:
+            db_simulations = get_recent_simulations(limit=50)
+            
+        # Combine background jobs with database results
+        return render_template('simulations.html',
+                            simulations=db_simulations,
+                            background_jobs=background_jobs)
+    except Exception as e:
+        # Fall back to file system if database fails
+        print(f"Warning: Could not fetch from database: {e}")
+        results_dirs = sorted(glob.glob('results/*'), key=os.path.getmtime, reverse=True)
+        recent_results = [os.path.basename(d) for d in results_dirs[:10]]
+        
+        return render_template('simulations.html',
+                            simulations=[],
+                            background_jobs=background_jobs,
+                            recent_results=recent_results,
+                            db_error=str(e))
 
 @app.route('/simulation_status/<sim_id>')
 def simulation_status(sim_id):

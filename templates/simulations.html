@@ -67,6 +67,64 @@
                     <span class="badge bg-info">{{ simulations|length }} results</span>
                 </div>
                 <div class="card-body">
+                    {% if background_jobs %}
+                        <h4>Running Simulations</h4>
+                        <div class="table-responsive mb-4">
+                            <table class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Circuit</th>
+                                        <th>Qubits</th>
+                                        <th>Time Points</th>
+                                        <th>Status</th>
+                                        <th>Progress</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for job in background_jobs %}
+                                    <tr>
+                                        <td>{{ job.id }}</td>
+                                        <td>{{ job.circuit_type }}</td>
+                                        <td>{{ job.qubits }}</td>
+                                        <td>{{ job.time_points }}</td>
+                                        <td>
+                                            {% if job.status == 'running' %}
+                                                <span class="badge bg-primary">Running</span>
+                                            {% elif job.status == 'starting' %}
+                                                <span class="badge bg-info">Starting</span>
+                                            {% elif job.status == 'complete' %}
+                                                <span class="badge bg-success">Complete</span>
+                                            {% elif job.status == 'error' %}
+                                                <span class="badge bg-danger">Error</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">{{ job.status }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="progress">
+                                                <div class="progress-bar" 
+                                                    role="progressbar" 
+                                                    style="width: {{ job.progress }}%;" 
+                                                    aria-valuenow="{{ job.progress }}" 
+                                                    aria-valuemin="0" 
+                                                    aria-valuemax="100">
+                                                    {{ job.progress }}%
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <a href="{{ url_for('simulation_status', sim_id=job.id) }}" class="btn btn-sm btn-info">Status</a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% endif %}
+                    
+                    <h4>Completed Simulations</h4>
                     {% if simulations %}
                         <div class="table-responsive">
                             <table class="table table-striped table-hover">
@@ -112,8 +170,20 @@
                                 </tbody>
                             </table>
                         </div>
+                    {% elif db_error %}
+                        <div class="alert alert-warning">
+                            <p>Could not load database results: {{ db_error }}</p>
+                            {% if recent_results %}
+                                <h5>Recent simulation results:</h5>
+                                <ul>
+                                    {% for result_name in recent_results %}
+                                        <li><a href="{{ url_for('view_result', result_name=result_name) }}">{{ result_name }}</a></li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                        </div>
                     {% else %}
-                        <div class="alert alert-info">No simulation results found.</div>
+                        <div class="alert alert-info">No completed simulation results found.</div>
                     {% endif %}
                 </div>
             </div>
