@@ -1,124 +1,121 @@
-{% extends "base.html" %}
-
-{% block title %}Simulation Results - {{ result_name }}{% endblock %}
+{% extends 'base.html' %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header bg-primary text-white">
-                <h4>Simulation Results: {{ result_name }}</h4>
-                <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-light float-end">Back to Simulations</a>
-            </div>
-            <div class="card-body">
-                {% if analysis %}
-                <div class="row mb-4">
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-header">Simulation Parameters</div>
-                            <div class="card-body">
-                                <table class="table table-sm">
-                                    <tbody>
-                                        {% for key, value in analysis.parameters.items() %}
-                                        <tr>
-                                            <th>{{ key }}</th>
-                                            <td>{{ value }}</td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-header">Analysis Results</div>
-                            <div class="card-body">
-                                <h5>Basic Analysis</h5>
-                                <table class="table table-sm">
-                                    <tbody>
-                                        {% for key, value in analysis.basic_analysis.items() %}
-                                        <tr>
-                                            <th>{{ key }}</th>
-                                            <td>{{ value }}</td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                                
-                                <h5 class="mt-3">Frequency Crystal Analysis</h5>
-                                <table class="table table-sm">
-                                    <tbody>
-                                        {% for key, value in analysis.frequency_crystal_analysis.items() %}
-                                        <tr>
-                                            <th>{{ key }}</th>
-                                            <td>{{ value }}</td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                                
-                                {% if analysis.linear_comb_analysis.mx_comb_found or analysis.linear_comb_analysis.mz_comb_found %}
-                                <div class="alert alert-success">
-                                    <h5>Frequency Comb Detected!</h5>
-                                    <ul>
-                                        {% if analysis.linear_comb_analysis.mx_comb_found %}
-                                        <li>X component: Omega={{ analysis.linear_comb_analysis.mx_best_omega }}, 
-                                            Teeth={{ analysis.linear_comb_analysis.mx_num_teeth }}</li>
-                                        {% endif %}
-                                        {% if analysis.linear_comb_analysis.mz_comb_found %}
-                                        <li>Z component: Omega={{ analysis.linear_comb_analysis.mz_best_omega }}, 
-                                            Teeth={{ analysis.linear_comb_analysis.mz_num_teeth }}</li>
-                                        {% endif %}
-                                    </ul>
-                                </div>
-                                {% endif %}
-                                
-                                {% if analysis.log_comb_analysis.mx_log_comb_found or analysis.log_comb_analysis.mz_log_comb_found %}
-                                <div class="alert alert-info">
-                                    <h5>Logarithmic Frequency Comb Detected!</h5>
-                                    <ul>
-                                        {% if analysis.log_comb_analysis.mx_log_comb_found %}
-                                        <li>X component: R={{ analysis.log_comb_analysis.mx_best_r }}, 
-                                            Base={{ analysis.log_comb_analysis.mx_base_freq }},
-                                            Teeth={{ analysis.log_comb_analysis.mx_log_num_teeth }}</li>
-                                        {% endif %}
-                                        {% if analysis.log_comb_analysis.mz_log_comb_found %}
-                                        <li>Z component: R={{ analysis.log_comb_analysis.mz_best_r }}, 
-                                            Base={{ analysis.log_comb_analysis.mz_base_freq }},
-                                            Teeth={{ analysis.log_comb_analysis.mz_log_num_teeth }}</li>
-                                        {% endif %}
-                                    </ul>
-                                </div>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% else %}
-                <div class="alert alert-warning">Analysis results not found</div>
-                {% endif %}
-                
-                {% if images %}
-                <h4 class="mt-4 mb-3">Generated Figures</h4>
-                <div class="row">
-                    {% for image in images %}
-                    <div class="col-md-6 mb-4">
-                        <div class="card">
-                            <div class="card-header">{{ image.name }}</div>
-                            <div class="card-body text-center">
-                                <img src="data:image/png;base64,{{ image.data }}" class="img-fluid" alt="{{ image.name }}">
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% else %}
-                <div class="alert alert-info mt-4">No figures generated for this simulation</div>
-                {% endif %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h4 class="mb-0">Simulation Results: {{ result_name }}</h4>
+        <div>
+            {% if time_crystal_detected %}
+            <span class="badge badge-crystal">Time Crystal Detected</span>
+            {% else %}
+            <span class="badge badge-nocrytal">No Time Crystal</span>
+            {% endif %}
+            
+            {% if incommensurate_count > 0 %}
+            <span class="badge bg-warning-subtle text-warning-emphasis">
+                {{ incommensurate_count }} Incommensurate Frequencies
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="mb-4">
+            <h5>Simulation Parameters</h5>
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <tbody>
+                        <tr>
+                            <th style="width: 180px;">Circuit Type:</th>
+                            <td>{{ result_data.circuit_type }}</td>
+                            <th style="width: 180px;">Qubits:</th>
+                            <td>{{ result_data.qubits }}</td>
+                        </tr>
+                        <tr>
+                            <th>Drive Parameter:</th>
+                            <td>{{ result_data.drive_param }}</td>
+                            <th>Drive Steps:</th>
+                            <td>{{ result_data.drive_steps }}</td>
+                        </tr>
+                        <tr>
+                            <th>Drive Frequency:</th>
+                            <td>{{ result_data.drive_freq }}</td>
+                            <th>Initial State:</th>
+                            <td>{{ result_data.init_state }}</td>
+                        </tr>
+                        <tr>
+                            <th>Time Points:</th>
+                            <td>{{ result_data.time_points }}</td>
+                            <th>Max Time:</th>
+                            <td>{{ result_data.max_time }}</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
+        
+        <div class="mb-4">
+            <h5>Analysis Results</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h6 class="card-title">Time Crystal Analysis</h6>
+                            <p class="mb-1">Status: 
+                                {% if time_crystal_detected %}
+                                <span class="text-success fw-bold">Detected</span>
+                                {% else %}
+                                <span class="text-danger">Not Detected</span>
+                                {% endif %}
+                            </p>
+                            <p class="mb-1">Drive Frequency: {{ result_data.drive_freq }}</p>
+                            {% if result_data.peak_frequencies %}
+                            <p class="mb-1">Significant Frequencies: {{ result_data.peak_frequencies|length }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h6 class="card-title">Frequency Comb Analysis</h6>
+                            <p class="mb-1">Linear Combs: 
+                                {% if result_data.linear_combs_detected %}
+                                <span class="text-success fw-bold">Detected</span>
+                                {% else %}
+                                <span class="text-danger">Not Detected</span>
+                                {% endif %}
+                            </p>
+                            <p class="mb-1">Log Combs: 
+                                {% if result_data.log_combs_detected %}
+                                <span class="text-success fw-bold">Detected</span>
+                                {% else %}
+                                <span class="text-danger">Not Detected</span>
+                                {% endif %}
+                            </p>
+                            <p class="mb-1">Incommensurate Frequencies: {{ incommensurate_count }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div>
+            <h5>Visualization</h5>
+            <div class="row">
+                {% for figure in figures %}
+                <div class="col-lg-6 mb-4">
+                    <div class="figure-container">
+                        <h6 class="mb-2">{{ figure|replace('_', ' ')|replace('.png', '')|title }}</h6>
+                        <img src="{{ url_for('get_figure', result_name=result_name, figure_name=figure) }}" 
+                             alt="{{ figure }}" class="img-fluid">
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="card-footer bg-transparent">
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Home</a>
     </div>
 </div>
 {% endblock %}

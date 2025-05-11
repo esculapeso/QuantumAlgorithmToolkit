@@ -20,6 +20,17 @@ os.makedirs(FIGURES_BASE_PATH, exist_ok=True)
 os.makedirs(RESULTS_BASE_PATH, exist_ok=True)
 os.makedirs(NUMERIC_DATA_BASE_PATH, exist_ok=True)
 
+# Default parameters for simulation
+DEFAULT_SIMULATION_PARAMS = {
+    "qubits": 3,
+    "shots": 8192,
+    "drive_steps": 5,
+    "time_points": 100,
+    "max_time": 10.0,
+    "drive_param": 0.9,
+    "init_state": "superposition"
+}
+
 # Default parameters for analysis
 DEFAULT_PEAK_HEIGHT_THRESHOLD = 0.05
 DEFAULT_MAX_RATIONAL_DENOMINATOR = 50

@@ -1,13 +1,11 @@
-{% extends "base.html" %}
-
-{% block title %}Quantum Simulation UI{% endblock %}
+{% extends 'base.html' %}
 
 {% block content %}
 <div class="row">
-    <div class="col-md-6">
-        <div class="card mb-4">
-            <div class="card-header bg-primary text-white">
-                <h4>Run New Simulation</h4>
+    <div class="col-lg-6">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary-subtle">
+                <h5 class="card-title mb-0">Run Quantum Simulation</h5>
             </div>
             <div class="card-body">
                 <form action="{{ url_for('run_sim') }}" method="post">
@@ -15,90 +13,134 @@
                         <label for="circuit_type" class="form-label">Circuit Type</label>
                         <select class="form-select" id="circuit_type" name="circuit_type" required>
                             {% for circuit in circuit_types %}
-                            <option value="{{ circuit }}">{{ circuit }}</option>
+                            <option value="{{ circuit.id }}">{{ circuit.name }}</option>
                             {% endfor %}
                         </select>
-                        <div class="form-text">Select the type of quantum circuit to simulate</div>
+                        <div class="form-text">Select the quantum circuit algorithm to simulate.</div>
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="qubits" class="form-label">Number of Qubits</label>
-                        <input type="number" class="form-control" id="qubits" name="qubits" min="2" max="10" value="3" required>
-                        <div class="form-text">Higher values may result in longer computation times</div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="qubits" class="form-label">Number of Qubits</label>
+                                <input type="number" class="form-control" id="qubits" name="qubits" 
+                                       min="1" max="10" value="3" required>
+                                <div class="form-text">More qubits = more complex simulation (3-6 recommended)</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="shots" class="form-label">Measurement Shots</label>
+                                <input type="number" class="form-control" id="shots" name="shots" 
+                                       min="1" max="20000" value="8192" required>
+                                <div class="form-text">Number of measurement repetitions</div>
+                            </div>
+                        </div>
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="drive_steps" class="form-label">Drive Steps</label>
-                        <input type="number" class="form-control" id="drive_steps" name="drive_steps" min="1" max="10" value="5" required>
-                        <div class="form-text">Number of driving sequence repetitions</div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="drive_steps" class="form-label">Drive Steps</label>
+                                <input type="number" class="form-control" id="drive_steps" name="drive_steps" 
+                                       min="1" max="20" value="5" required>
+                                <div class="form-text">Number of drive sequence repetitions</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="drive_param" class="form-label">Drive Parameter</label>
+                                <input type="number" class="form-control" id="drive_param" name="drive_param" 
+                                       min="0.1" max="2.0" step="0.1" value="0.9" required>
+                                <div class="form-text">Controls drive strength (0.1-2.0)</div>
+                            </div>
+                        </div>
                     </div>
                     
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="time_points" class="form-label">Time Points</label>
-                                <input type="number" class="form-control" id="time_points" name="time_points" min="10" max="500" value="100" required>
-                                <div class="form-text">Number of simulation time steps</div>
+                                <input type="number" class="form-control" id="time_points" name="time_points" 
+                                       min="10" max="1000" value="100" required>
+                                <div class="form-text">Number of simulation time points</div>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="max_time" class="form-label">Max Time</label>
-                                <input type="number" class="form-control" id="max_time" name="max_time" min="1" max="100" step="0.1" value="10.0" required>
-                                <div class="form-text">Simulation time limit</div>
+                                <input type="number" class="form-control" id="max_time" name="max_time" 
+                                       min="1" max="50" value="10.0" step="0.5" required>
+                                <div class="form-text">Maximum simulation time</div>
                             </div>
                         </div>
                     </div>
                     
                     <div class="mb-3">
-                        <label for="drive_param" class="form-label">Drive Parameter</label>
-                        <input type="number" class="form-control" id="drive_param" name="drive_param" min="0.1" max="2.0" step="0.1" value="0.9" required>
-                        <div class="form-text">Parameter controlling the drive strength</div>
-                    </div>
-                    
-                    <div class="mb-3">
                         <label for="init_state" class="form-label">Initial State</label>
-                        <select class="form-select" id="init_state" name="init_state" required>
-                            <option value="superposition">Superposition</option>
-                            <option value="|00..0>">|00..0></option>
-                            <option value="|10..0>">|10..0></option>
-                            <option value="random">Random</option>
+                        <select class="form-select" id="init_state" name="init_state">
+                            <option value="superposition">Superposition (Default)</option>
+                            <option value="|00..0>">|00..0> (All Zeros)</option>
+                            <option value="|11..1>">|11..1> (All Ones)</option>
                         </select>
-                        <div class="form-text">Initial quantum state for simulation</div>
+                        <div class="form-text">Initial quantum state for the simulation</div>
                     </div>
                     
-                    <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary">Run Simulation</button>
-                    </div>
+                    <button type="submit" class="btn btn-primary">Run Simulation</button>
                 </form>
             </div>
         </div>
     </div>
     
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header bg-secondary text-white">
-                <h4>Recent Simulations</h4>
+    <div class="col-lg-6">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-info-subtle">
+                <h5 class="card-title mb-0">Recent Simulation Results</h5>
             </div>
             <div class="card-body">
                 {% if recent_results %}
-                <div class="list-group">
+                <div class="row">
                     {% for result in recent_results %}
-                    <a href="{{ url_for('view_result', result_name=result.name) }}" class="list-group-item list-group-item-action">
-                        <div class="d-flex w-100 justify-content-between">
-                            <h5 class="mb-1">{{ result.circuit_type }} ({{ result.qubits }} qubits)</h5>
-                            <small>{{ result.date }}</small>
+                    <div class="col-md-6 mb-3">
+                        <div class="card result-card h-100 border-info-subtle">
+                            <div class="card-body">
+                                <h6 class="card-title text-truncate">{{ result }}</h6>
+                                <p class="card-text small text-muted">
+                                    {{ result.split('_')[0] }} circuit
+                                </p>
+                            </div>
+                            <div class="card-footer bg-transparent border-top-0">
+                                <a href="{{ url_for('view_result', result_name=result) }}" class="btn btn-sm btn-outline-info">View Results</a>
+                            </div>
                         </div>
-                        <p class="mb-1">{{ result.name }}</p>
-                        {% if result.has_figures %}
-                        <small><span class="badge bg-info">Has plots</span></small>
-                        {% endif %}
-                    </a>
+                    </div>
                     {% endfor %}
                 </div>
                 {% else %}
-                <div class="alert alert-info">No simulation results found</div>
+                <div class="alert alert-secondary">
+                    <p class="mb-0">No simulation results found. Run your first simulation to see results here.</p>
+                </div>
                 {% endif %}
+            </div>
+        </div>
+        
+        <div class="card shadow-sm">
+            <div class="card-header bg-secondary-subtle">
+                <h5 class="card-title mb-0">About Quantum Simulation</h5>
+            </div>
+            <div class="card-body">
+                <p>This interface allows you to run quantum simulations to study time crystals and frequency combs in quantum systems. The implementation uses Qiskit for quantum circuit simulation.</p>
+                
+                <h6>Available Circuit Types:</h6>
+                <ul>
+                    <li><strong>Penrose-inspired Circuit:</strong> Based on Penrose tiling patterns</li>
+                    <li><strong>QFT Basic Circuit:</strong> Uses Quantum Fourier Transform</li>
+                    <li><strong>Frequency Comb Generator:</strong> Optimized for frequency comb structures</li>
+                    <li><strong>Twistor-inspired Comb Circuit:</strong> Based on twistor space mathematics</li>
+                    <li><strong>Graphene Lattice Circuit:</strong> Inspired by graphene's lattice structure</li>
+                </ul>
+                
+                <p class="small text-muted mt-3">Note: Simulations with more qubits will take longer to run. For optimal performance, we recommend using 3-6 qubits.</p>
             </div>
         </div>
     </div>

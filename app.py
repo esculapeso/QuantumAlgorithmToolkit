@@ -1,139 +1,122 @@
 """
 Flask web application to run quantum simulations and view results.
 """
-
 import os
-import io
+import glob
 import json
-import base64
-from datetime import datetime
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+import simulation
+import utils
+import visualization
+import config
 
-# Import simulation modules
-from simulation import run_simulation
-from utils import ensure_dependencies
-import quantum_circuits
-
-# Initialize Flask app
 app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET", "quantum-secret-key")
-
-# Ensure required packages are available
-ensure_dependencies()
+app.secret_key = os.environ.get("SESSION_SECRET", "quantum-simulation-secret")
 
 @app.route('/')
 def index():
     """Render the main page."""
-    # Get available circuit types
+    # Get a list of recent simulation results
+    results_dirs = sorted(glob.glob('results/*'), key=os.path.getmtime, reverse=True)
+    recent_results = [os.path.basename(d) for d in results_dirs[:10]]  # Show 10 most recent
+    
+    # Available circuit types
     circuit_types = [
-        'penrose',
-        'qft_basic',
-        'comb_generator',
-        'comb_twistor',
-        'graphene_fc'
+        {"id": "penrose", "name": "Penrose-inspired Circuit"},
+        {"id": "qft_basic", "name": "QFT Basic Circuit"},
+        {"id": "comb_generator", "name": "Frequency Comb Generator"},
+        {"id": "comb_twistor", "name": "Twistor-inspired Comb Circuit"},
+        {"id": "graphene_fc", "name": "Graphene Lattice Circuit"}
     ]
     
-    # Find the most recent simulation results
-    results_dir = "results"
-    recent_results = []
-    
-    if os.path.exists(results_dir):
-        # List all result directories
-        result_dirs = sorted([d for d in os.listdir(results_dir) 
-                              if os.path.isdir(os.path.join(results_dir, d))],
-                             key=lambda x: os.path.getmtime(os.path.join(results_dir, x)),
-                             reverse=True)
-        
-        # Get the 5 most recent
-        for rd in result_dirs[:5]:
-            result_path = os.path.join(results_dir, rd)
-            analysis_file = os.path.join(result_path, 'analysis_results.json')
-            
-            if os.path.exists(analysis_file):
-                with open(analysis_file, 'r') as f:
-                    analysis = json.load(f)
-                
-                # Extract basic info
-                recent_results.append({
-                    'name': rd,
-                    'date': datetime.fromtimestamp(os.path.getmtime(result_path)).strftime('%Y-%m-%d %H:%M:%S'),
-                    'circuit_type': analysis.get('parameters', {}).get('circuit_type', 'unknown'),
-                    'qubits': analysis.get('parameters', {}).get('qubits', 0),
-                    'has_figures': any(f.endswith('.png') for f in os.listdir(result_path)) if os.path.exists(result_path) else False
-                })
-    
-    return render_template('index.html', circuit_types=circuit_types, recent_results=recent_results)
+    return render_template('index.html', 
+                          recent_results=recent_results,
+                          circuit_types=circuit_types,
+                          default_params=config.DEFAULT_SIMULATION_PARAMS)
 
 @app.route('/run_simulation', methods=['POST'])
 def run_sim():
     """Run a simulation with the provided parameters."""
-    # Extract parameters from form
-    circuit_type = request.form.get('circuit_type', 'penrose')
-    qubits = int(request.form.get('qubits', 3))
-    drive_steps = int(request.form.get('drive_steps', 5))
-    time_points = int(request.form.get('time_points', 100))
-    max_time = float(request.form.get('max_time', 10.0))
-    drive_param = float(request.form.get('drive_param', 0.9))
-    init_state = request.form.get('init_state', 'superposition')
-    
-    # Generate a unique name for this run
-    timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-    param_set_name = f"web_run_{qubits}q_{timestamp}"
-    
-    # Run the simulation
-    result = run_simulation(
-        circuit_type=circuit_type,
-        qubits=qubits,
-        shots=8192,  # Fixed for now
-        drive_steps=drive_steps,
-        time_points=time_points,
-        max_time=max_time,
-        drive_param=drive_param,
-        init_state=init_state,
-        param_set_name=param_set_name,
-        save_results=True,
-        show_plots=False,
-        plot_circuit=True,
-        verbose=True
-    )
-    
-    # Redirect to the results page
-    return redirect(url_for('view_result', result_name=f"{circuit_type}_{param_set_name}"))
+    try:
+        # Extract parameters from form
+        circuit_type = request.form.get('circuit_type')
+        qubits = int(request.form.get('qubits', 3))
+        shots = int(request.form.get('shots', 8192))
+        drive_steps = int(request.form.get('drive_steps', 5))
+        time_points = int(request.form.get('time_points', 100))
+        max_time = float(request.form.get('max_time', 10.0))
+        drive_param = float(request.form.get('drive_param', 0.9))
+        init_state = request.form.get('init_state', 'superposition')
+        
+        # Run the simulation
+        param_set_name = f"web_{circuit_type}_{qubits}q"
+        result = simulation.run_simulation(
+            circuit_type=circuit_type,
+            qubits=qubits,
+            shots=shots,
+            drive_steps=drive_steps,
+            time_points=time_points,
+            max_time=max_time,
+            drive_param=drive_param,
+            init_state=init_state,
+            param_set_name=param_set_name,
+            save_results=True,
+            show_plots=False,
+            plot_circuit=True,
+            verbose=True
+        )
+        
+        # Get the result directory name
+        results_path = result.get('results_path', '')
+        result_name = os.path.basename(results_path) if results_path else None
+        
+        # Redirect to the result view
+        if result_name:
+            return redirect(url_for('view_result', result_name=result_name))
+        else:
+            flash('Simulation completed but result path not found.')
+            return redirect(url_for('index'))
+        
+    except Exception as e:
+        flash(f'Error running simulation: {str(e)}')
+        return redirect(url_for('index'))
 
-@app.route('/results/<result_name>')
+@app.route('/result/<result_name>')
 def view_result(result_name):
     """View a specific simulation result."""
-    results_dir = "results"
-    result_path = os.path.join(results_dir, result_name)
+    try:
+        # Base path for this result
+        result_path = os.path.join('results', result_name)
+        
+        # Load the saved result data
+        with open(os.path.join(result_path, 'result_data.json'), 'r') as f:
+            result_data = json.load(f)
+        
+        # Get list of figure files
+        figure_files = glob.glob(os.path.join(result_path, 'figures', '*.png'))
+        figures = [os.path.basename(f) for f in figure_files]
+        
+        # Get data about the time crystal and frequency comb detection
+        time_crystal_detected = result_data.get('time_crystal_detected', False)
+        incommensurate_count = result_data.get('incommensurate_count', 0)
+        
+        return render_template('result.html',
+                             result_name=result_name,
+                             figures=figures,
+                             result_data=result_data,
+                             time_crystal_detected=time_crystal_detected,
+                             incommensurate_count=incommensurate_count)
     
-    if not os.path.exists(result_path):
-        return "Result not found", 404
-    
-    # Load analysis results
-    analysis_file = os.path.join(result_path, 'analysis_results.json')
-    analysis = {}
-    
-    if os.path.exists(analysis_file):
-        with open(analysis_file, 'r') as f:
-            analysis = json.load(f)
-    
-    # Get list of image files
-    image_files = [f for f in os.listdir(result_path) if f.endswith('.png')]
-    images = []
-    
-    for img_file in image_files:
-        img_path = os.path.join(result_path, img_file)
-        with open(img_path, 'rb') as f:
-            img_data = base64.b64encode(f.read()).decode('utf-8')
-            images.append({
-                'name': img_file,
-                'data': img_data
-            })
-    
-    return render_template('result.html', 
-                          result_name=result_name, 
-                          analysis=analysis, 
-                          images=images)
+    except Exception as e:
+        flash(f'Error viewing result: {str(e)}')
+        return redirect(url_for('index'))
+
+@app.route('/figure/<result_name>/<figure_name>')
+def get_figure(result_name, figure_name):
+    """Get a figure file for a result."""
+    return redirect(url_for('static', filename=f'../results/{result_name}/figures/{figure_name}'))
 
 if __name__ == '__main__':
+    # Check dependencies
+    utils.ensure_dependencies()
     app.run(host='0.0.0.0', port=5000, debug=True)

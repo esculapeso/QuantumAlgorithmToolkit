@@ -2,7 +2,6 @@
 Entry point for the web application.
 This file starts the Flask application.
 """
-
 from app import app
 
 if __name__ == "__main__":
