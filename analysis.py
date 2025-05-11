@@ -6,7 +6,14 @@ Contains functions for FFT analysis and frequency comb detection.
 import numpy as np
 from scipy import signal
 from fractions import Fraction
-import pywt
+
+# Try to import pywt but continue if not available
+try:
+    import pywt
+    PYWT_AVAILABLE = True
+except ImportError:
+    print("WARNING: PyWavelets not available, some features will be limited")
+    PYWT_AVAILABLE = False
 
 from utils import is_harmonic_related
 import config

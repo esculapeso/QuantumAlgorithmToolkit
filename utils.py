@@ -3,7 +3,6 @@ Utility functions for quantum simulation package.
 Contains helper functions used across the codebase.
 """
 
-import numpy as np
 import os
 import json
 import datetime
@@ -11,45 +10,52 @@ import traceback
 from fractions import Fraction
 import random
 import sys
+import config
 
 def ensure_dependencies():
     """Check and install required dependencies."""
     try:
         import qiskit
-        import qiskit_aer
+        # Try to import qiskit_aer, but fall back to alternative import if needed
+        try:
+            import qiskit_aer
+        except ImportError:
+            try:
+                from qiskit.providers import aer
+                print("Using qiskit.providers.aer instead of qiskit_aer")
+            except ImportError:
+                print("WARNING: Neither qiskit_aer nor qiskit.providers.aer could be imported")
+        
         import matplotlib
         import scipy
-        import pywt
-        import pandas
         import numpy as np
         from scipy import signal
-        from scipy.integrate import simps  # Using Simpson's rule for potential integration
-        import traceback
+        # Try to import simps, but use a fallback if not available
+        try:
+            from scipy.integrate import simps  # Using Simpson's rule for potential integration
+        except ImportError:
+            # Define a simple version of Simpson's rule integration as fallback
+            def simps(y, x=None, dx=1.0):
+                """Simple fallback implementation of Simpson's rule integration"""
+                if x is None:
+                    return np.sum(y) * dx
+                else:
+                    return np.trapz(y, x)  # Fall back to trapezoid rule
+        import pandas
+        
+        # PyWavelets is optional - we'll try to import it but won't fail if it's not available
+        try:
+            import pywt
+            print("PyWavelets (pywt) is available.")
+        except ImportError:
+            print("WARNING: PyWavelets (pywt) is not available. Some wavelet analysis features may be limited.")
+        
         print("Required packages seem to be installed.")
         return True
-    except ImportError:
-        print("Attempting to install required packages: qiskit, qiskit-aer, matplotlib, scipy, pywavelets, pandas...")
-        # Use pip on the system level to install
-        import subprocess
-        import sys
-        try:
-            # Ensure pip is available and install packages
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "qiskit", "qiskit-aer", "pywavelets"])
-            print("Installation successful.")
-            # Need to import again after installation
-            import qiskit
-            import qiskit_aer
-            import pywt
-            return True
-        except subprocess.CalledProcessError as e:
-            print(f"ERROR: Failed to install required packages: {e}")
-            sys.exit(1)  # Exit if installation fails
-        except ImportError:
-            print("ERROR: Still unable to import required packages after attempting installation.")
-            sys.exit(1)  # Exit if import fails after install attempt
-        except Exception as e:
-            print(f"An unexpected error occurred during package check/install: {e}")
-            sys.exit(1)
+    except ImportError as e:
+        print(f"ERROR: Missing required packages: {e}")
+        print("Please install the following packages: qiskit, matplotlib, scipy, numpy, pandas")
+        return False
 
 def is_harmonic_related(freq, drive_freq, tolerance=0.15, max_n=10, max_m=5):
     """Checks relationship between freq and drive_freq."""

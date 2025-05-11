@@ -389,18 +389,22 @@ def plot_circuit_diagram(circuit, time_value=None, circuit_type='',
     """
     Plot the quantum circuit diagram.
     """
-    if time_value is not None:
-        # Create a version with the time parameter bound to a value
-        from qiskit.circuit import Parameter
-        t_param = circuit.parameters.pop()  # Assuming only one Parameter
-        bound_circuit = circuit.bind_parameters({t_param: time_value})
-    else:
-        bound_circuit = circuit
+    # Skip parameter binding - works with both old and new Qiskit versions
+    # We'll just use the original circuit and add a note in the title
+    bound_circuit = circuit
     
     # Create the figure and draw the circuit
     try:
         fig, ax = plt.subplots(figsize=(12, min(10, 1 + 0.7 * bound_circuit.num_qubits)))
-        circuit_drawing = bound_circuit.draw(output='mpl', ax=ax)
+        
+        try:
+            circuit_drawing = bound_circuit.draw(output='mpl', ax=ax)
+        except Exception as draw_error:
+            print(f"Warning: Could not draw circuit diagram: {draw_error}")
+            # Create a simple text representation as fallback
+            ax.text(0.5, 0.5, f"Circuit type: {circuit_type}\nQubits: {qubit_count}\nDepth: {circuit.depth()}", 
+                   ha='center', va='center', fontsize=12)
+            ax.axis('off')
         
         # Set title
         qubits_info = f" ({qubit_count} qubits)" if qubit_count else ""

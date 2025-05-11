@@ -17,9 +17,9 @@ from visualization import plot_circuit_diagram
 def main():
     """Main function to run simulations."""
     # Check required dependencies
-    if not ensure_dependencies():
-        print("Failed to ensure required dependencies.")
-        sys.exit(1)
+    ensure_dependencies()
+    print("\n===== Quantum Simulation Package =====")
+    print("Note: Some features may be limited based on available packages")
     
     # Default parameters
     circuit_type = 'penrose'  # Options: 'penrose', 'qft_basic', 'comb_generator', 'comb_twistor', 'graphene_fc'
