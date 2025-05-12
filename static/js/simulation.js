@@ -1,184 +1,84 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize auto-refresh for simulations page
-    initSimulationsPageRefresh();
+    // Enable auto-refresh on simulations page to see new completed simulations
+    initSimulationsPageAutoRefresh();
     
-    // Initialize form handling for index page
+    // Initialize parameter sweep UI interactions
+    initParameterSweepUI();
+    
+    // Initialize form handling for simulation form
     const form = document.querySelector('#simulation-form');
-    if (!form) return;
-    
-    const progressSection = document.getElementById('simulation-progress');
-    const progressBar = document.getElementById('progress-bar');
-    const progressStatus = document.getElementById('progress-status');
-    const progressDetail = document.getElementById('progress-detail');
-    const runButton = document.getElementById('run-sim-button');
-    
-    let simulationId = null;
-    let checkInterval = null;
-    
-    form.addEventListener('submit', function(e) {
-        // Check if this is a large simulation
-        const qubits = parseInt(document.getElementById('qubits').value);
-        const timePoints = parseInt(document.getElementById('time_points').value);
-        
-        if (qubits > 3 || timePoints > 100) {
-            e.preventDefault();
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            // For large simulations, show a message
+            const qubits = parseInt(document.getElementById('qubits').value);
+            const timePoints = parseInt(document.getElementById('time_points').value);
             
-            // Show progress section
-            progressSection.classList.remove('d-none');
-            progressBar.style.width = '0%';
-            progressBar.textContent = '0%';
-            progressDetail.textContent = 'Initializing simulation...';
-            runButton.disabled = true;
-            
-            // Get form data
-            const formData = new FormData(form);
-            
-            // Send AJAX request
-            fetch(form.action, {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
+            if (qubits > 3 || timePoints > 100) {
+                // Show a tooltip that this will take longer
+                const infoBox = document.createElement('div');
+                infoBox.className = 'alert alert-info mt-3';
+                infoBox.innerHTML = '<strong>Running larger simulation...</strong> This may take some time to complete. ' +
+                    'For very large simulations, you\'ll be redirected to the Simulations page where you can track progress.';
+                
+                // Add the info box after the form
+                form.parentNode.appendChild(infoBox);
+                
+                // If extremely large, give additional warning
+                if (qubits > 6 || timePoints > 500) {
+                    const warningBox = document.createElement('div');
+                    warningBox.className = 'alert alert-warning mt-1';
+                    warningBox.innerHTML = '<strong>Note:</strong> Very large simulations may take several minutes to complete. ' +
+                        'Each simulation will appear in the "Completed Simulations" list when it finishes.';
+                    
+                    // Add the warning box after the info box
+                    form.parentNode.appendChild(warningBox);
                 }
-            })
-            .then(response => {
-                // Always check content type first
-                const contentType = response.headers.get('content-type');
-                
-                if (!response.ok) {
-                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-                }
-                
-                if (!contentType || !contentType.includes('application/json')) {
-                    // Handle HTML response - likely a server error or timeout
-                    return response.text().then(text => {
-                        throw new Error('Server returned HTML instead of JSON. For very large simulations, please run with fewer time points or check the Simulations page for background jobs.');
-                    });
-                }
-                
-                return response.json();
-            })
-            .then(data => {
-                if (data.error) {
-                    progressStatus.textContent = 'Error';
-                    progressDetail.textContent = data.error;
-                    progressSection.classList.remove('alert-info');
-                    progressSection.classList.add('alert-danger');
-                    runButton.disabled = false;
-                    return;
-                }
-                
-                simulationId = data.simulation_id;
-                
-                // Start checking progress
-                checkInterval = setInterval(checkProgress, 1000);
-            })
-            .catch(error => {
-                console.error('Simulation error:', error);
-                progressStatus.textContent = 'Error';
-                progressDetail.textContent = 'Failed to start simulation: ' + error.message;
-                progressSection.classList.remove('alert-info');
-                progressSection.classList.add('alert-danger');
-                runButton.disabled = false;
-                
-                // If very large simulation, suggest alternatives
-                if (timePoints > 500) {
-                    progressDetail.innerHTML = progressDetail.textContent + 
-                        '<br><br>Recommendation: Try with fewer time points or check the <a href="/simulations">Simulations</a> page for any background jobs.';
-                }
-            });
-        }
-    });
-    
-    function checkProgress() {
-        if (!simulationId) return;
-        
-        fetch(`/simulation_status/${simulationId}`, {
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        })
-        .then(response => {
-            // Always check content type first
-            const contentType = response.headers.get('content-type');
-            
-            if (!response.ok) {
-                throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-            }
-            
-            if (!contentType || !contentType.includes('application/json')) {
-                // Handle HTML response - likely a server error
-                return response.text().then(text => {
-                    throw new Error('Server returned HTML instead of JSON. Please check the Simulations page for your job status.');
-                });
-            }
-            
-            return response.json();
-        })
-        .then(data => {
-            if (data.error) {
-                clearInterval(checkInterval);
-                progressStatus.textContent = 'Error';
-                progressDetail.textContent = data.error;
-                progressSection.classList.remove('alert-info');
-                progressSection.classList.add('alert-danger');
-                runButton.disabled = false;
-                return;
-            }
-            
-            // Update progress information
-            if (data.status === 'completed') {
-                clearInterval(checkInterval);
-                progressBar.style.width = '100%';
-                progressBar.textContent = '100%';
-                progressStatus.textContent = 'Simulation Complete!';
-                progressDetail.textContent = data.message || 'Redirecting to results...';
-                
-                // Redirect to result page
-                if (data.result_path) {
-                    setTimeout(() => {
-                        window.location.href = `/result/${data.result_path}`;
-                    }, 1000);
-                } else {
-                    runButton.disabled = false;
-                }
-            } else if (data.status === 'running' || data.status === 'starting') {
-                const progress = data.progress || 0;
-                progressBar.style.width = `${progress}%`;
-                progressBar.textContent = `${progress}%`;
-                progressDetail.textContent = data.message || `Processing: ${progress}% complete`;
-            }
-        })
-        .catch(error => {
-            console.error('Error checking status:', error);
-            
-            // Only show a UI error if we haven't already
-            if (progressSection.classList.contains('alert-info')) {
-                clearInterval(checkInterval);
-                progressStatus.textContent = 'Error';
-                progressDetail.textContent = 'Failed to check simulation status: ' + error.message;
-                progressDetail.innerHTML += '<br><br>You can check the <a href="/simulations">Simulations</a> page to see if your job is still running.';
-                progressSection.classList.remove('alert-info');
-                progressSection.classList.add('alert-danger');
-                runButton.disabled = false;
             }
         });
     }
     
     // Function to handle auto-refresh on the simulations page
-    function initSimulationsPageRefresh() {
-        // Check if we're on the simulations page by looking for a table with job information
-        const jobsTable = document.querySelector('table tbody tr td:first-child');
-        if (!jobsTable) return; // Not on simulations page or no jobs listed
+    function initSimulationsPageAutoRefresh() {
+        // Check if we're on the simulations page
+        if (!window.location.pathname.includes('/simulations')) return;
         
-        // Auto-refresh every 10 seconds if there are running jobs
-        const hasRunningJobs = document.querySelector('.badge.bg-primary, .badge.bg-info:not(.badge[role])');
-        if (hasRunningJobs) {
-            // Set a reasonable interval - not too frequent to avoid overloading the server
-            setTimeout(function() {
-                // Refresh the page with current URL parameters
-                window.location.reload();
-            }, 10000); // 10 seconds
-        }
+        // Check if there are any simulations in the table
+        const simTable = document.querySelector('.table.table-striped');
+        if (!simTable) return;
+        
+        // Auto-refresh every 10 seconds to see new completed simulations
+        setTimeout(function() {
+            // Refresh the page with current URL parameters
+            window.location.reload();
+        }, 10000); // 10 seconds
+    }
+    
+    // Function to initialize parameter sweep UI
+    function initParameterSweepUI() {
+        // Find all the sweep toggle checkboxes
+        const sweepToggles = document.querySelectorAll('input[type="checkbox"][id^="sweep_"]');
+        
+        // Add event listeners to all sweep toggles
+        sweepToggles.forEach(toggle => {
+            toggle.addEventListener('change', function() {
+                // Get the parameter name from the toggle ID
+                const paramName = this.id.replace('sweep_', '');
+                
+                // Find the min, max, and steps inputs for this parameter
+                const minInput = document.getElementById(`${paramName}_min`);
+                const maxInput = document.getElementById(`${paramName}_max`);
+                const stepsInput = document.getElementById(`${paramName}_steps`);
+                const rangeControls = document.getElementById(`${paramName}_range_controls`);
+                
+                if (minInput && maxInput && stepsInput && rangeControls) {
+                    // Show or hide the range controls based on the toggle state
+                    if (this.checked) {
+                        rangeControls.classList.remove('d-none');
+                    } else {
+                        rangeControls.classList.add('d-none');
+                    }
+                }
+            });
+        });
     }
 });

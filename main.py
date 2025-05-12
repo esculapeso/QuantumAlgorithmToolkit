@@ -13,9 +13,8 @@ import threading
 import uuid
 import time
 
-# Dictionary to store background simulation status
-# Defined at module level to be accessible throughout the code
-BACKGROUND_SIMULATIONS = {}
+# We've simplified the code to not track background simulations explicitly.
+# Each simulation now just appears in the "Completed Simulations" list when it's done.
 
 # Import custom modules
 import config
@@ -625,10 +624,9 @@ def view_simulations():
         else:
             db_simulations = get_recent_simulations(limit=50)
             
-        # Combine background jobs with database results
+        # Show database results
         return render_template('simulations.html',
-                            simulations=db_simulations,
-                            background_jobs=background_jobs)
+                            simulations=db_simulations)
     except Exception as e:
         # Fall back to file system if database fails
         print(f"Warning: Could not fetch from database: {e}")
@@ -637,29 +635,11 @@ def view_simulations():
         
         return render_template('simulations.html',
                             simulations=[],
-                            background_jobs=background_jobs,
                             recent_results=recent_results,
                             db_error=str(e))
 
-@app.route('/simulation_status/<sim_id>')
-def simulation_status(sim_id):
-    """Get the status of a specific simulation."""
-    try:
-        if sim_id in BACKGROUND_SIMULATIONS:
-            return jsonify(BACKGROUND_SIMULATIONS[sim_id]), 200, {'Content-Type': 'application/json'}
-        else:
-            return jsonify({'error': 'Simulation not found', 'status': 'error'}), 404, {'Content-Type': 'application/json'}
-    except Exception as e:
-        # Print traceback for debugging
-        error_traceback = traceback.format_exc()
-        print(f"Status check error: {str(e)}")
-        print(error_traceback)
-        
-        # Ensure we always return valid JSON even on unexpected errors
-        return jsonify({
-            'error': f'Error checking simulation status: {str(e)}',
-            'status': 'error'
-        }), 500, {'Content-Type': 'application/json'}
+# The simulation_status route has been removed as we no longer track individual
+# simulation status through BACKGROUND_SIMULATIONS dictionary
 
 @app.route('/result/<result_name>')
 def view_result(result_name):
