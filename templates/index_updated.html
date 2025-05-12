@@ -1,0 +1,277 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-6">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary-subtle">
+                <h4 class="card-title mb-0">Quantum Simulation Settings</h4>
+            </div>
+            <div class="card-body">
+                <div class="mb-4">
+                    <!-- Simulation form -->
+                    <form id="simulation-form" action="/run_simulation" method="post" class="mb-4">
+                        <div class="row">
+                            <!-- Circuit Type -->
+                            <div class="col-md-6 mb-3">
+                                <label for="circuit_type" class="form-label">Circuit Type</label>
+                                <select class="form-select" id="circuit_type" name="circuit_type">
+                                    <option value="penrose">Penrose-Inspired</option>
+                                    <option value="qft_basic">QFT-Based</option>
+                                    <option value="comb_generator">Comb Generator</option>
+                                    <option value="comb_twistor">Comb Twistor</option>
+                                    <option value="graphene_fc">Graphene FC</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Qubits -->
+                            <div class="col-md-6 mb-3">
+                                <label for="qubits" class="form-label">Qubits</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="qubits" name="qubits" min="2" max="10" value="3">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <!-- Drive Parameter -->
+                            <div class="col-md-6 mb-3">
+                                <label for="drive_param" class="form-label">Drive Parameter</label>
+                                <input type="number" class="form-control" id="drive_param" name="drive_param" min="0.1" max="2.0" step="0.1" value="0.9">
+                            </div>
+                            
+                            <!-- Drive Steps -->
+                            <div class="col-md-6 mb-3">
+                                <label for="drive_steps" class="form-label">Drive Steps</label>
+                                <input type="number" class="form-control" id="drive_steps" name="drive_steps" min="1" max="20" value="5">
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <!-- Time Points -->
+                            <div class="col-md-6 mb-3">
+                                <label for="time_points" class="form-label">Time Points <span class="fw-light text-muted fs-6">(≤300 recommended)</span></label>
+                                <input type="number" class="form-control" id="time_points" name="time_points" min="10" max="1000" value="100">
+                                <div class="form-text text-warning">Values > 300 will run in background mode</div>
+                            </div>
+                            
+                            <!-- Max Time -->
+                            <div class="col-md-6 mb-3">
+                                <label for="max_time" class="form-label">Max Time</label>
+                                <input type="number" class="form-control" id="max_time" name="max_time" min="1" max="50" step="1" value="10">
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <!-- Initial State -->
+                            <div class="col-md-6 mb-3">
+                                <label for="init_state" class="form-label">Initial State</label>
+                                <select class="form-select" id="init_state" name="init_state">
+                                    <option value="superposition">Superposition</option>
+                                    <option value="zeros">All Zeros</option>
+                                    <option value="ones">All Ones</option>
+                                    <option value="alternating">Alternating</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Shots -->
+                            <div class="col-md-6 mb-3">
+                                <label for="shots" class="form-label">Shots</label>
+                                <input type="number" class="form-control" id="shots" name="shots" min="1024" max="32768" step="1024" value="8192">
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid mt-4">
+                            <button type="submit" class="btn btn-primary" id="run-button">Run Simulation</button>
+                        </div>
+                    </form>
+                </div>
+                
+                <!-- Simulation Progress -->
+                <div id="progress-section" class="alert alert-info d-none">
+                    <h5 id="progress-status">Running Simulation...</h5>
+                    <p id="progress-detail">Initializing...</p>
+                    <div class="progress" style="height: 25px;">
+                        <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" 
+                             aria-valuemax="100">0%</div>
+                    </div>
+                </div>
+                
+                <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        const form = document.getElementById('simulation-form');
+                        const progressSection = document.getElementById('progress-section');
+                        const progressBar = document.getElementById('progress-bar');
+                        const progressStatus = document.getElementById('progress-status');
+                        const progressDetail = document.getElementById('progress-detail');
+                        const runButton = document.getElementById('run-button');
+                        
+                        let simulationId = null;
+                        let checkInterval = null;
+                        
+                        form.addEventListener('submit', function(e) {
+                            if (form.checkValidity()) {
+                                e.preventDefault();
+                                
+                                // Show progress section
+                                progressSection.classList.remove('d-none');
+                                progressBar.style.width = '0%';
+                                progressBar.textContent = '0%';
+                                progressDetail.textContent = 'Initializing simulation...';
+                                runButton.disabled = true;
+                                
+                                // Get form data
+                                const formData = new FormData(form);
+                                
+                                // Check for large simulations
+                                const timePoints = parseInt(formData.get('time_points'), 10);
+                                if (timePoints > 300) {
+                                    progressDetail.textContent = 'Starting long-running simulation in the background...';
+                                }
+                                
+                                // Send AJAX request
+                                fetch(form.action, {
+                                    method: 'POST',
+                                    body: formData
+                                })
+                                .then(response => {
+                                    if (!response.ok) {
+                                        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                                    }
+                                    // Add error handling for JSON parsing
+                                    return response.json().catch(error => {
+                                        console.error("Failed to parse JSON response:", error);
+                                        throw new Error("The server returned an invalid response format. Try using fewer time points.");
+                                    });
+                                })
+                                .then(data => {
+                                    if (data.error) {
+                                        progressStatus.textContent = 'Error';
+                                        progressDetail.textContent = data.error;
+                                        progressSection.classList.remove('alert-info');
+                                        progressSection.classList.add('alert-danger');
+                                        runButton.disabled = false;
+                                        return;
+                                    }
+                                    
+                                    simulationId = data.simulation_id;
+                                    
+                                    // Start checking progress
+                                    checkInterval = setInterval(checkProgress, 1000);
+                                })
+                                .catch(error => {
+                                    console.error('Simulation error:', error);
+                                    progressStatus.textContent = 'Error';
+                                    progressDetail.textContent = 'Failed to start simulation: ' + error.message;
+                                    progressSection.classList.remove('alert-info');
+                                    progressSection.classList.add('alert-danger');
+                                    runButton.disabled = false;
+                                });
+                            }
+                        });
+                        
+                        function checkProgress() {
+                            if (!simulationId) return;
+                            
+                            fetch(`/simulation_status/${simulationId}`)
+                                .then(response => {
+                                    if (!response.ok) {
+                                        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                                    }
+                                    // Add error handling for JSON parsing
+                                    return response.json().catch(error => {
+                                        console.error("Failed to parse JSON from status endpoint:", error);
+                                        throw new Error("The server returned an invalid response format while checking status.");
+                                    });
+                                })
+                                .then(data => {
+                                    // Update progress information
+                                    if (data.status === 'completed') {
+                                        clearInterval(checkInterval);
+                                        progressBar.style.width = '100%';
+                                        progressBar.textContent = '100%';
+                                        progressStatus.textContent = 'Simulation Complete!';
+                                        progressDetail.textContent = data.message || 'Redirecting to results...';
+                                        
+                                        // Redirect to result page
+                                        if (data.result_path) {
+                                            setTimeout(() => {
+                                                window.location.href = `/result/${data.result_path}`;
+                                            }, 1000);
+                                        } else {
+                                            runButton.disabled = false;
+                                        }
+                                    } else if (data.status === 'running' || data.status === 'starting') {
+                                        const progress = data.progress || 0;
+                                        progressBar.style.width = `${progress}%`;
+                                        progressBar.textContent = `${progress}%`;
+                                        progressDetail.textContent = data.message || `Processing: ${progress}% complete`;
+                                    } else if (data.status === 'error') {
+                                        clearInterval(checkInterval);
+                                        progressStatus.textContent = 'Error';
+                                        progressDetail.textContent = data.error || 'An unknown error occurred';
+                                        progressSection.classList.remove('alert-info');
+                                        progressSection.classList.add('alert-danger');
+                                        runButton.disabled = false;
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('Error checking status:', error);
+                                    
+                                    // Only show a UI error if we haven't already
+                                    if (progressSection.classList.contains('alert-info')) {
+                                        clearInterval(checkInterval);
+                                        progressStatus.textContent = 'Error';
+                                        progressDetail.textContent = 'Failed to check simulation status: ' + error.message;
+                                        progressSection.classList.remove('alert-info');
+                                        progressSection.classList.add('alert-danger');
+                                        runButton.disabled = false;
+                                    }
+                                });
+                        }
+                    });
+                </script>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-info-subtle">
+                <h5 class="card-title mb-0">Recent Simulation Results</h5>
+            </div>
+            <div class="card-body">
+                {% if recent_results %}
+                <div class="row">
+                    {% for result in recent_results %}
+                    <div class="col-md-6 col-lg-12 col-xl-6 mb-3">
+                        <div class="card h-100 border-0 shadow-sm">
+                            <div class="card-body">
+                                <h6 class="card-title">{{ result.circuit_type|title }} ({{ result.qubits }}q)</h6>
+                                <p class="card-text small mb-1">Time Points: {{ result.time_points }}</p>
+                                <p class="card-text small mb-2">
+                                    Run: {{ result.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                </p>
+                                <div class="mb-1">
+                                    {% if result.time_crystal_detected %}
+                                    <span class="badge badge-crystal">Time Crystal Detected</span>
+                                    {% else %}
+                                    <span class="badge badge-nocrytal">No Time Crystal</span>
+                                    {% endif %}
+                                </div>
+                                <a href="{{ url_for('view_result', result_name=result.result_name) }}" 
+                                   class="btn btn-sm btn-outline-primary mt-2">View Results</a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted">No simulations found. Run your first simulation to see results!</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
