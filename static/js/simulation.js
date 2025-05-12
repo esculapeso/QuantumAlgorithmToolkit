@@ -1,128 +1,127 @@
-/**
- * JavaScript functions for the simulation interface
- */
-
-// Global variables
-let simulationId = null;
-let checkInterval = null;
-
-/**
- * Handle the form submission for starting a new simulation
- */
-function handleSimulationFormSubmit(event, form, progressSection, progressBar, progressStatus, progressDetail, runButton) {
-    event.preventDefault();
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('#simulation-form');
+    if (!form) return;
     
-    // Show progress section
-    progressSection.classList.remove('d-none');
-    progressBar.style.width = '0%';
-    progressBar.textContent = '0%';
-    progressDetail.textContent = 'Initializing simulation...';
-    runButton.disabled = true;
+    const progressSection = document.getElementById('simulation-progress');
+    const progressBar = document.getElementById('progress-bar');
+    const progressStatus = document.getElementById('progress-status');
+    const progressDetail = document.getElementById('progress-detail');
+    const runButton = document.getElementById('run-sim-button');
     
-    // Get form data
-    const formData = new FormData(form);
+    let simulationId = null;
+    let checkInterval = null;
     
-    // Check if time points exceeds 300
-    const timePoints = parseInt(formData.get('time_points'), 10);
-    if (timePoints > 300) {
-        progressDetail.textContent = 'Starting long-running simulation in the background...';
-    }
-    
-    // Send AJAX request
-    fetch(form.action, {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => {
-        if (!response.ok) {
-            // Try to parse the error response as JSON first
-            return response.text().then(text => {
-                try {
-                    // See if it's a valid JSON
-                    const json = JSON.parse(text);
-                    throw new Error(json.error || `Server error: ${response.status}`);
-                } catch (jsonError) {
-                    // Not valid JSON, likely HTML error page or timeout
-                    console.error("Server returned non-JSON response:", text);
-                    if (text.includes("WORKER TIMEOUT") || text.includes("504") || text.includes("timeout")) {
-                        throw new Error("The server timed out. Please try with fewer time points (under 200) or check the Simulations page for background jobs.");
-                    } else {
-                        throw new Error("The server returned an HTML error. Try using the background processing option with fewer time points.");
-                    }
+    form.addEventListener('submit', function(e) {
+        // Check if this is a large simulation
+        const qubits = parseInt(document.getElementById('qubits').value);
+        const timePoints = parseInt(document.getElementById('time_points').value);
+        
+        if (qubits > 3 || timePoints > 100) {
+            e.preventDefault();
+            
+            // Show progress section
+            progressSection.classList.remove('d-none');
+            progressBar.style.width = '0%';
+            progressBar.textContent = '0%';
+            progressDetail.textContent = 'Initializing simulation...';
+            runButton.disabled = true;
+            
+            // Get form data
+            const formData = new FormData(form);
+            
+            // Send AJAX request
+            fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => {
+                // Always check content type first
+                const contentType = response.headers.get('content-type');
+                
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                }
+                
+                if (!contentType || !contentType.includes('application/json')) {
+                    // Handle HTML response - likely a server error or timeout
+                    return response.text().then(text => {
+                        throw new Error('Server returned HTML instead of JSON. For very large simulations, please run with fewer time points or check the Simulations page for background jobs.');
+                    });
+                }
+                
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    progressStatus.textContent = 'Error';
+                    progressDetail.textContent = data.error;
+                    progressSection.classList.remove('alert-info');
+                    progressSection.classList.add('alert-danger');
+                    runButton.disabled = false;
+                    return;
+                }
+                
+                simulationId = data.simulation_id;
+                
+                // Start checking progress
+                checkInterval = setInterval(checkProgress, 1000);
+            })
+            .catch(error => {
+                console.error('Simulation error:', error);
+                progressStatus.textContent = 'Error';
+                progressDetail.textContent = 'Failed to start simulation: ' + error.message;
+                progressSection.classList.remove('alert-info');
+                progressSection.classList.add('alert-danger');
+                runButton.disabled = false;
+                
+                // If very large simulation, suggest alternatives
+                if (timePoints > 500) {
+                    progressDetail.innerHTML = progressDetail.textContent + 
+                        '<br><br>Recommendation: Try with fewer time points or check the <a href="/simulations">Simulations</a> page for any background jobs.';
                 }
             });
         }
-        
-        // Handle valid response
-        return response.json().catch(error => {
-            // Handle JSON parsing errors (e.g., if server returned HTML instead of JSON)
-            console.error("Failed to parse JSON response:", error);
-            throw new Error("The server returned an invalid response format. Try reducing the number of time points.");
-        });
-    })
-    .then(data => {
-        if (data.error) {
-            progressStatus.textContent = 'Error';
-            progressDetail.textContent = data.error;
-            progressSection.classList.remove('alert-info');
-            progressSection.classList.add('alert-danger');
-            runButton.disabled = false;
-            return;
-        }
-        
-        simulationId = data.simulation_id;
-        
-        // Start checking progress
-        checkInterval = setInterval(() => checkProgress(
-            simulationId, 
-            progressBar, 
-            progressStatus, 
-            progressDetail, 
-            progressSection, 
-            runButton
-        ), 1000);
-    })
-    .catch(error => {
-        console.error('Simulation error:', error);
-        progressStatus.textContent = 'Error';
-        progressDetail.textContent = 'Failed to start simulation: ' + error.message;
-        progressSection.classList.remove('alert-info');
-        progressSection.classList.add('alert-danger');
-        runButton.disabled = false;
     });
-}
-
-/**
- * Check the progress of a running simulation
- */
-function checkProgress(simulationId, progressBar, progressStatus, progressDetail, progressSection, runButton) {
-    if (!simulationId) return;
     
-    fetch(`/simulation_status/${simulationId}`)
+    function checkProgress() {
+        if (!simulationId) return;
+        
+        fetch(`/simulation_status/${simulationId}`, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
         .then(response => {
+            // Always check content type first
+            const contentType = response.headers.get('content-type');
+            
             if (!response.ok) {
-                // Try to parse the error response as JSON first
+                throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+            }
+            
+            if (!contentType || !contentType.includes('application/json')) {
+                // Handle HTML response - likely a server error
                 return response.text().then(text => {
-                    try {
-                        // See if it's a valid JSON
-                        const json = JSON.parse(text);
-                        throw new Error(json.error || `Server error: ${response.status}`);
-                    } catch (jsonError) {
-                        // Not valid JSON, likely HTML error page
-                        console.error("Server returned non-JSON response:", text);
-                        throw new Error("The server returned an HTML error. The simulation may have timed out.");
-                    }
+                    throw new Error('Server returned HTML instead of JSON. Please check the Simulations page for your job status.');
                 });
             }
             
-            // Handle valid response
-            return response.json().catch(error => {
-                // Handle JSON parsing errors
-                console.error("Failed to parse JSON from status endpoint:", error);
-                throw new Error("The server returned an invalid response format.");
-            });
+            return response.json();
         })
         .then(data => {
+            if (data.error) {
+                clearInterval(checkInterval);
+                progressStatus.textContent = 'Error';
+                progressDetail.textContent = data.error;
+                progressSection.classList.remove('alert-info');
+                progressSection.classList.add('alert-danger');
+                runButton.disabled = false;
+                return;
+            }
+            
             // Update progress information
             if (data.status === 'completed') {
                 clearInterval(checkInterval);
@@ -144,14 +143,6 @@ function checkProgress(simulationId, progressBar, progressStatus, progressDetail
                 progressBar.style.width = `${progress}%`;
                 progressBar.textContent = `${progress}%`;
                 progressDetail.textContent = data.message || `Processing: ${progress}% complete`;
-            } else if (data.status === 'error') {
-                clearInterval(checkInterval);
-                progressBar.style.width = '100%';
-                progressStatus.textContent = 'Error';
-                progressDetail.textContent = data.error || 'An unknown error occurred';
-                progressSection.classList.remove('alert-info');
-                progressSection.classList.add('alert-danger');
-                runButton.disabled = false;
             }
         })
         .catch(error => {
@@ -162,9 +153,11 @@ function checkProgress(simulationId, progressBar, progressStatus, progressDetail
                 clearInterval(checkInterval);
                 progressStatus.textContent = 'Error';
                 progressDetail.textContent = 'Failed to check simulation status: ' + error.message;
+                progressDetail.innerHTML += '<br><br>You can check the <a href="/simulations">Simulations</a> page to see if your job is still running.';
                 progressSection.classList.remove('alert-info');
                 progressSection.classList.add('alert-danger');
                 runButton.disabled = false;
             }
         });
-}
+    }
+});
