@@ -368,6 +368,25 @@ def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
         }
         with open(os.path.join(data_path, 'fc_peaks_data.json'), 'w') as f:
             json.dump(fc_peaks_data, f, indent=2)
+            
+        # Create a summary result_data.json file at the root of the results folder
+        # This is used by the web UI to display simulation results
+        result_data = {
+            'parameters': analysis_results['parameters'],
+            'time_crystal_detected': analysis_results['basic_analysis']['has_subharmonics'],
+            'incommensurate_count': analysis_results['frequency_crystal_analysis']['incommensurate_peak_count'],
+            'drive_frequency': analysis_results['basic_analysis']['drive_frequency'],
+            'linear_combs_detected': (
+                analysis_results['linear_comb_analysis']['mx_comb_found'] or 
+                analysis_results['linear_comb_analysis']['mz_comb_found']
+            ),
+            'log_combs_detected': (
+                analysis_results['log_comb_analysis']['mx_log_comb_found'] or 
+                analysis_results['log_comb_analysis']['mz_log_comb_found']
+            )
+        }
+        with open(os.path.join(res_path, 'result_data.json'), 'w') as f:
+            json.dump(result_data, f, indent=2)
         
         # Save to Google Drive if enabled
         if gdrive_save_path:
