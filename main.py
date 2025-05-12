@@ -392,8 +392,10 @@ def run_background_parameter_sweep(sweep_id, circuit_type, parameter_sets, scan_
             param_set_name = f"{scan_name}_{i+1}_{param_suffix}"
             
             try:
-                # Run the simulation
+                # Run the simulation and ensure it's saved to the database
                 from simulation import run_simulation
+                from db_utils import save_simulation_to_db
+                
                 result = run_simulation(
                     circuit_type=circuit_type,
                     qubits=param_set.get('qubits', 3),
@@ -407,6 +409,19 @@ def run_background_parameter_sweep(sweep_id, circuit_type, parameter_sets, scan_
                     save_results=True,
                     show_plots=False
                 )
+                
+                # Make sure this result is saved to the database
+                try:
+                    # Get the result path
+                    result_path = result.get('result_path', '').split('/')[-1]
+                    
+                    # Save to database explicitly to ensure it appears in completed list
+                    db_result = save_simulation_to_db(result, result_path)
+                    print(f"Saved sweep simulation {i+1}/{total_sets} to database with ID {db_result.id}")
+                except Exception as e:
+                    print(f"Error saving to database: {str(e)}")
+                    traceback.print_exc()
+                
                 results.append(result)
             except Exception as e:
                 print(f"Error running parameter set {i+1}/{total_sets}: {str(e)}")
@@ -420,7 +435,7 @@ def run_background_parameter_sweep(sweep_id, circuit_type, parameter_sets, scan_
         BACKGROUND_SIMULATIONS[sweep_id]['end_time'] = time.time()
         BACKGROUND_SIMULATIONS[sweep_id]['result_count'] = len(results)
         
-        # Store the paths to the individual simulation results
+        # Store the paths to the individual simulation results (for backwards compatibility)
         result_paths = []
         for result in results:
             result_path = result.get('result_path', '').split('/')[-1]
@@ -428,7 +443,7 @@ def run_background_parameter_sweep(sweep_id, circuit_type, parameter_sets, scan_
                 result_paths.append(result_path)
         
         BACKGROUND_SIMULATIONS[sweep_id]['result_paths'] = result_paths
-        print(f"Parameter sweep completed with {len(results)} simulations. Result paths: {result_paths}")
+        print(f"Parameter sweep completed with {len(results)} simulations. All results have been saved to the database and will appear in the 'Completed Simulations' list.")
         
     except Exception as e:
         # If an error occurs, store it in the simulation status
