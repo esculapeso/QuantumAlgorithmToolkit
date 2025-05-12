@@ -46,13 +46,13 @@ def index():
     # Get a list of recent simulation results from the database
     try:
         from db_utils import get_recent_simulations
-        recent_db_results = get_recent_simulations(limit=10)
-        recent_results = [sim.result_name for sim in recent_db_results]
+        recent_results = get_recent_simulations(limit=10)
     except Exception as e:
         # Fall back to file system if database fails
+        recent_results = []
         print(f"Warning: Could not fetch from database: {e}")
-        results_dirs = sorted(glob.glob('results/*'), key=os.path.getmtime, reverse=True)
-        recent_results = [os.path.basename(d) for d in results_dirs[:10]]  # Show 10 most recent
+        # Just use empty list - we don't want to use the file system directly
+        # since it doesn't have the proper object structure the template expects
     
     # Available circuit types
     circuit_types = [
@@ -63,7 +63,7 @@ def index():
         {"id": "graphene_fc", "name": "Graphene Lattice Circuit"}
     ]
     
-    return render_template('index.html', 
+    return render_template('index_updated.html', 
                           recent_results=recent_results,
                           circuit_types=circuit_types,
                           default_params=config.DEFAULT_SIMULATION_PARAMS)
