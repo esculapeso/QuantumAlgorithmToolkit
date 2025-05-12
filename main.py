@@ -420,6 +420,16 @@ def run_background_parameter_sweep(sweep_id, circuit_type, parameter_sets, scan_
         BACKGROUND_SIMULATIONS[sweep_id]['end_time'] = time.time()
         BACKGROUND_SIMULATIONS[sweep_id]['result_count'] = len(results)
         
+        # Store the paths to the individual simulation results
+        result_paths = []
+        for result in results:
+            result_path = result.get('result_path', '').split('/')[-1]
+            if result_path:
+                result_paths.append(result_path)
+        
+        BACKGROUND_SIMULATIONS[sweep_id]['result_paths'] = result_paths
+        print(f"Parameter sweep completed with {len(results)} simulations. Result paths: {result_paths}")
+        
     except Exception as e:
         # If an error occurs, store it in the simulation status
         error_traceback = traceback.format_exc()
@@ -680,7 +690,9 @@ def view_simulations():
                 'circuit_type': params.get('circuit_type', 'unknown'),
                 'status': sim_data.get('status', 'unknown'),
                 'progress': sim_data.get('progress', 0),
-                'is_background_job': True
+                'message': sim_data.get('message', ''),
+                'is_background_job': True,
+                'result_paths': sim_data.get('result_paths', [])
             }
             
             # Parameter sweep might store info differently

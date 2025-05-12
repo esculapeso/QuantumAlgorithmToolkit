@@ -60,9 +60,44 @@
                                     </div>
                                 </td>
                                 <td>
-                                    <a href="{{ url_for('simulation_status', sim_id=job.id) }}" class="btn btn-sm btn-outline-info">Status</a>
+                                    {% if job.status == 'complete' and job.circuit_type.endswith(' (sweep)') %}
+                                        <button type="button" class="btn btn-sm btn-outline-primary" 
+                                                data-bs-toggle="collapse" 
+                                                data-bs-target="#sweepResults{{ loop.index }}">
+                                            View Results
+                                        </button>
+                                    {% else %}
+                                        <a href="{{ url_for('simulation_status', sim_id=job.id) }}" class="btn btn-sm btn-outline-info">Status</a>
+                                    {% endif %}
                                 </td>
                             </tr>
+                            {% if job.status == 'complete' and job.circuit_type.endswith(' (sweep)') %}
+                            <tr class="collapse" id="sweepResults{{ loop.index }}">
+                                <td colspan="7">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <h6 class="card-title">Parameter Sweep Results</h6>
+                                            <p class="card-text">{{ job.message }}</p>
+                                            {% if job.result_paths %}
+                                                <div class="list-group mt-3">
+                                                    {% for path in job.result_paths %}
+                                                    <a href="{{ url_for('view_result', result_name=path) }}" class="list-group-item list-group-item-action">
+                                                        <div class="d-flex w-100 justify-content-between">
+                                                            <h6 class="mb-1">Simulation {{ loop.index }}</h6>
+                                                            <small class="text-body-secondary">View Details</small>
+                                                        </div>
+                                                        <p class="mb-1">{{ path }}</p>
+                                                    </a>
+                                                    {% endfor %}
+                                                </div>
+                                            {% else %}
+                                                <div class="alert alert-warning">No individual simulation results available</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endif %}
                             {% endfor %}
                         </tbody>
                     </table>
