@@ -13,6 +13,10 @@ import threading
 import uuid
 import time
 
+# Dictionary to store background simulation status
+# Defined at module level to be accessible throughout the code
+BACKGROUND_SIMULATIONS = {}
+
 # Import custom modules
 import config
 from utils import ensure_dependencies
