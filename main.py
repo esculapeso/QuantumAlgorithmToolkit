@@ -116,16 +116,59 @@ def handle_exception(error):
 def index():
     """Render the main page."""
     # Get a list of recent simulation results from the database
+    latest_result = None
+    latest_figures = []
+    latest_result_data = {}
+    time_crystal_detected = False
+    incommensurate_count = 0
+    
     try:
-        from db_utils import get_recent_simulations
-        # For backward compatibility with the template expecting strings
+        from db_utils import get_recent_simulations, get_simulation_by_name
+        # Get the most recent simulation
         db_results = get_recent_simulations(limit=10)
-        recent_results = [r.result_name for r in db_results]
+        
+        if db_results and len(db_results) > 0:
+            latest_db_result = db_results[0]
+            latest_result = latest_db_result.result_name
+            
+            # Get the detailed data for the latest result
+            result_name = latest_result
+            result_path = f"results/{result_name}"
+            
+            if os.path.exists(result_path):
+                # Look for analysis.json or result_data.json
+                analysis_path = os.path.join(result_path, 'analysis.json')
+                result_data_path = os.path.join(result_path, 'result_data.json')
+                
+                if os.path.exists(analysis_path):
+                    with open(analysis_path, 'r') as f:
+                        analysis = json.load(f)
+                    latest_result_data = {
+                        'parameters': analysis.get('parameters', {}),
+                        'time_crystal_detected': analysis.get('basic_analysis', {}).get('has_subharmonics', False),
+                        'incommensurate_count': analysis.get('frequency_crystal_analysis', {}).get('incommensurate_peak_count', 0),
+                        'drive_frequency': analysis.get('basic_analysis', {}).get('drive_frequency', 0.0)
+                    }
+                elif os.path.exists(result_data_path):
+                    # Load the saved result data 
+                    with open(result_data_path, 'r') as f:
+                        latest_result_data = json.load(f)
+                
+                # Get list of figure files
+                figure_files = glob.glob(os.path.join(result_path, 'figures', '*.png'))
+                if not figure_files:
+                    # As a fallback, check if there are figures directly in the result path
+                    figure_files = glob.glob(os.path.join(result_path, '*.png'))
+                latest_figures = [os.path.basename(f) for f in figure_files]
+                
+                # Get data about the time crystal and frequency comb detection
+                time_crystal_detected = latest_result_data.get('time_crystal_detected', False)
+                incommensurate_count = latest_result_data.get('incommensurate_count', 0)
+    
     except Exception as e:
         # Fall back to file system if database fails
-        recent_results = []
-        print(f"Warning: Could not fetch from database: {e}")
-        # If needed, we could scan the results directory here
+        print(f"Warning: Could not fetch latest result details: {e}")
+        traceback.print_exc()
     
     # Available circuit types
     circuit_types = [
@@ -137,7 +180,11 @@ def index():
     ]
     
     return render_template('index.html', 
-                          recent_results=recent_results,
+                          latest_result=latest_result,
+                          latest_figures=latest_figures,
+                          latest_result_data=latest_result_data,
+                          time_crystal_detected=time_crystal_detected,
+                          incommensurate_count=incommensurate_count,
                           circuit_types=circuit_types,
                           default_params=config.DEFAULT_SIMULATION_PARAMS)
 
