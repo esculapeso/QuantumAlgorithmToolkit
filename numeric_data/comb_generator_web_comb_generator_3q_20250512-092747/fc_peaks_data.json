@@ -1,0 +1,12 @@
+{
+  "potential_fc_peaks": [
+    {
+      "frequency": 1.31484375,
+      "amplitude": 0.08416690883952235,
+      "basis": "Mx",
+      "ratio_to_drive": 13.1484375,
+      "relation_guess": "~drive*355/27",
+      "is_potentially_incommensurate": false
+    }
+  ]
+}

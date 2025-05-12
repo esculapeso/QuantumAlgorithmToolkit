@@ -77,7 +77,7 @@ import json
 BACKGROUND_SIMULATIONS = {}
 
 @app.route('/run_simulation', methods=['POST'])
-def run_sim():
+def run_simulation():
     """Run a simulation with the provided parameters."""
     try:
         # Extract parameters from form
@@ -191,8 +191,14 @@ def run_sim():
         
     except Exception as e:
         error_message = f'Error running simulation: {str(e)}'
+        print(f"Simulation error: {error_message}")
         
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.content_type == 'application/json':
+        # Determine if this is an AJAX request
+        is_ajax = (request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 
+                  request.content_type == 'application/json' or
+                  request.args.get('format') == 'json')
+        
+        if is_ajax:
             return jsonify({
                 'status': 'error',
                 'error': error_message
@@ -211,6 +217,9 @@ def run_background_simulation(sim_id, params):
         def progress_callback(step, total):
             progress = int((step / total) * 100)
             BACKGROUND_SIMULATIONS[sim_id]['progress'] = progress
+        
+        # Import run_simulation here to avoid circular imports
+        from simulation import run_simulation
         
         # Run the simulation with the progress callback
         result = run_simulation(
