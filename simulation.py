@@ -29,7 +29,8 @@ def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
                   time_points=100, max_time=10.0, drive_param=0.9,
                   init_state='superposition', param_set_name='default',
                   save_results=True, show_plots=False, aer_method='statevector',
-                  plot_circuit=True, verbose=True, progress_callback=None):
+                  plot_circuit=True, verbose=True, progress_callback=None, 
+                  seed=None):
     """
     Run a single quantum simulation with specified parameters.
     
@@ -54,6 +55,15 @@ def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
         dict: Results of the simulation, including analysis
     """
     start_time = time.time()
+    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    
+    # Set random seed if provided, otherwise generate a unique one
+    if seed is None:
+        import random
+        seed = random.randint(10000, 99999)
+    
+    # Use seed for reproducibility but uniqueness across runs
+    np.random.seed(seed)
     
     # Create folder structure for saving results
     if save_results:
@@ -383,7 +393,9 @@ def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
             'log_combs_detected': (
                 analysis_results['log_comb_analysis']['mx_log_comb_found'] or 
                 analysis_results['log_comb_analysis']['mz_log_comb_found']
-            )
+            ),
+            'random_seed': seed,
+            'timestamp': timestamp
         }
         with open(os.path.join(res_path, 'result_data.json'), 'w') as f:
             json.dump(result_data, f, indent=2)
