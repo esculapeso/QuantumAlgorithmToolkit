@@ -2,7 +2,80 @@
 
 {% block content %}
 <div class="row">
-    <div class="col-lg-6">
+    <!-- Left column: Latest simulation results -->
+    <div class="col-lg-7">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-info-subtle d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Latest Simulation Results</h5>
+                {% if latest_result %}
+                <div>
+                    {% if time_crystal_detected %}
+                    <span class="badge badge-crystal">Time Crystal Detected</span>
+                    {% else %}
+                    <span class="badge badge-nocrytal">No Time Crystal</span>
+                    {% endif %}
+                    
+                    {% if incommensurate_count > 0 %}
+                    <span class="badge bg-warning-subtle text-warning-emphasis">
+                        {{ incommensurate_count }} Incommensurate Frequencies
+                    </span>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if latest_result %}
+                    <!-- Simulation parameters -->
+                    <div class="mb-3">
+                        <h6 class="border-bottom pb-2">Simulation Parameters</h6>
+                        <div class="row small">
+                            <div class="col-md-6">
+                                <p class="mb-1"><strong>Circuit Type:</strong> {{ latest_result_data.parameters.circuit_type }}</p>
+                                <p class="mb-1"><strong>Qubits:</strong> {{ latest_result_data.parameters.qubits }}</p>
+                                <p class="mb-1"><strong>Drive Parameter:</strong> {{ latest_result_data.parameters.drive_param }}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p class="mb-1"><strong>Drive Frequency:</strong> {{ latest_result_data.drive_frequency }}</p>
+                                <p class="mb-1"><strong>Time Points:</strong> {{ latest_result_data.parameters.time_points }}</p>
+                                <p class="mb-1"><strong>Max Time:</strong> {{ latest_result_data.parameters.max_time }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Visualization -->
+                    <div>
+                        <h6 class="border-bottom pb-2">Visualization</h6>
+                        <div class="row">
+                            {% for figure in latest_figures %}
+                            <div class="col-md-6 mb-3">
+                                <div class="figure-container">
+                                    <h6 class="mb-2 small">{{ figure|replace('_', ' ')|replace('.png', '')|title }}</h6>
+                                    <img src="{{ url_for('get_figure', result_name=latest_result, figure_name=figure) }}" 
+                                        alt="{{ figure }}" class="img-fluid border rounded">
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="mt-3">
+                            <a href="{{ url_for('view_result', result_name=latest_result) }}" class="btn btn-sm btn-outline-primary">
+                                View Full Results
+                            </a>
+                            <a href="{{ url_for('view_simulations') }}" class="btn btn-sm btn-outline-secondary ms-2">
+                                All Simulations
+                            </a>
+                        </div>
+                    </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <p class="mb-0">No simulations found. Run your first simulation to see results!</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Right column: Simulation form -->
+    <div class="col-lg-5">
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-primary-subtle">
                 <h5 class="card-title mb-0">Run Quantum Simulation</h5>
@@ -115,59 +188,6 @@
                 
                 <!-- Add JavaScript for progress tracking -->
                 <script src="/static/js/simulation.js"></script>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-lg-6">
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-info-subtle">
-                <h5 class="card-title mb-0">Recent Simulation Results</h5>
-            </div>
-            <div class="card-body">
-                {% if recent_results %}
-                <div class="row">
-                    {% for result in recent_results %}
-                    <div class="col-md-6 mb-3">
-                        <div class="card result-card h-100 border-info-subtle">
-                            <div class="card-body">
-                                <h6 class="card-title text-truncate">{{ result }}</h6>
-                                <p class="card-text small text-muted">
-                                    {{ result.split('_')[0] }} circuit
-                                </p>
-                            </div>
-                            <div class="card-footer bg-transparent border-top-0">
-                                <a href="{{ url_for('view_result', result_name=result) }}" class="btn btn-sm btn-outline-info">View Results</a>
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% else %}
-                <div class="alert alert-secondary">
-                    <p class="mb-0">No simulation results found. Run your first simulation to see results here.</p>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        
-        <div class="card shadow-sm">
-            <div class="card-header bg-secondary-subtle">
-                <h5 class="card-title mb-0">About Quantum Simulation</h5>
-            </div>
-            <div class="card-body">
-                <p>This interface allows you to run quantum simulations to study time crystals and frequency combs in quantum systems. The implementation uses Qiskit for quantum circuit simulation.</p>
-                
-                <h6>Available Circuit Types:</h6>
-                <ul>
-                    <li><strong>Penrose-inspired Circuit:</strong> Based on Penrose tiling patterns</li>
-                    <li><strong>QFT Basic Circuit:</strong> Uses Quantum Fourier Transform</li>
-                    <li><strong>Frequency Comb Generator:</strong> Optimized for frequency comb structures</li>
-                    <li><strong>Twistor-inspired Comb Circuit:</strong> Based on twistor space mathematics</li>
-                    <li><strong>Graphene Lattice Circuit:</strong> Inspired by graphene's lattice structure</li>
-                </ul>
-                
-                <p class="small text-muted mt-3">Note: Simulations with more qubits will take longer to run. For optimal performance, we recommend using 3-6 qubits.</p>
             </div>
         </div>
     </div>

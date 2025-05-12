@@ -1,4 +1,8 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize auto-refresh for simulations page
+    initSimulationsPageRefresh();
+    
+    // Initialize form handling for index page
     const form = document.querySelector('#simulation-form');
     if (!form) return;
     
@@ -159,5 +163,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 runButton.disabled = false;
             }
         });
+    }
+    
+    // Function to handle auto-refresh on the simulations page
+    function initSimulationsPageRefresh() {
+        // Check if we're on the simulations page by looking for a table with job information
+        const jobsTable = document.querySelector('table tbody tr td:first-child');
+        if (!jobsTable) return; // Not on simulations page or no jobs listed
+        
+        // Auto-refresh every 10 seconds if there are running jobs
+        const hasRunningJobs = document.querySelector('.badge.bg-primary, .badge.bg-info:not(.badge[role])');
+        if (hasRunningJobs) {
+            // Set a reasonable interval - not too frequent to avoid overloading the server
+            setTimeout(function() {
+                // Refresh the page with current URL parameters
+                window.location.reload();
+            }, 10000); // 10 seconds
+        }
     }
 });
