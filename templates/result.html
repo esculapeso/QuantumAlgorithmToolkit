@@ -26,27 +26,27 @@
                     <tbody>
                         <tr>
                             <th style="width: 180px;">Circuit Type:</th>
-                            <td>{{ result_data.circuit_type }}</td>
+                            <td>{{ result_data.parameters.circuit_type }}</td>
                             <th style="width: 180px;">Qubits:</th>
-                            <td>{{ result_data.qubits }}</td>
+                            <td>{{ result_data.parameters.qubits }}</td>
                         </tr>
                         <tr>
                             <th>Drive Parameter:</th>
-                            <td>{{ result_data.drive_param }}</td>
+                            <td>{{ result_data.parameters.drive_param }}</td>
                             <th>Drive Steps:</th>
-                            <td>{{ result_data.drive_steps }}</td>
+                            <td>{{ result_data.parameters.drive_steps }}</td>
                         </tr>
                         <tr>
                             <th>Drive Frequency:</th>
-                            <td>{{ result_data.drive_freq }}</td>
+                            <td>{{ result_data.drive_frequency }}</td>
                             <th>Initial State:</th>
-                            <td>{{ result_data.init_state }}</td>
+                            <td>{{ result_data.parameters.init_state }}</td>
                         </tr>
                         <tr>
                             <th>Time Points:</th>
-                            <td>{{ result_data.time_points }}</td>
+                            <td>{{ result_data.parameters.time_points }}</td>
                             <th>Max Time:</th>
-                            <td>{{ result_data.max_time }}</td>
+                            <td>{{ result_data.parameters.max_time }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -67,7 +67,7 @@
                                 <span class="text-danger">Not Detected</span>
                                 {% endif %}
                             </p>
-                            <p class="mb-1">Drive Frequency: {{ result_data.drive_freq }}</p>
+                            <p class="mb-1">Drive Frequency: {{ result_data.drive_frequency }}</p>
                             {% if result_data.peak_frequencies %}
                             <p class="mb-1">Significant Frequencies: {{ result_data.peak_frequencies|length }}</p>
                             {% endif %}

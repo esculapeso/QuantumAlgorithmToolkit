@@ -8,7 +8,7 @@
                 <h5 class="card-title mb-0">Run Quantum Simulation</h5>
             </div>
             <div class="card-body">
-                <form action="{{ url_for('run_sim') }}" method="post">
+                <form action="/run_simulation" method="post" id="simulation-form">
                     <div class="mb-3">
                         <label for="circuit_type" class="form-label">Circuit Type</label>
                         <select class="form-select" id="circuit_type" name="circuit_type" required>
@@ -195,14 +195,14 @@
                                         progressDetail.textContent = data.message || 'Redirecting to results...';
                                         
                                         // Redirect to result page
-                                        if (data.result_name) {
+                                        if (data.result_path) {
                                             setTimeout(() => {
-                                                window.location.href = `/result/${data.result_name}`;
+                                                window.location.href = `/result/${data.result_path}`;
                                             }, 1000);
                                         } else {
                                             runButton.disabled = false;
                                         }
-                                    } else if (data.status === 'running') {
+                                    } else if (data.status === 'running' || data.status === 'starting') {
                                         const progress = data.progress || 0;
                                         progressBar.style.width = `${progress}%`;
                                         progressBar.textContent = `${progress}%`;
