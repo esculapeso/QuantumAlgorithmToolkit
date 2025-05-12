@@ -357,25 +357,38 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
                 
                 # Import here to avoid circular imports
                 from simulation import run_simulation
+                from db_utils import save_simulation_to_db
                 
-                # Run the simulation - each one will be saved to the database automatically
-                result = run_simulation(
-                    circuit_type=circuit_type,
-                    qubits=param_set.get('qubits', 3),
-                    shots=param_set.get('shots', 8192),
-                    drive_steps=param_set.get('drive_steps', 5),
-                    time_points=param_set.get('time_points', 100),
-                    max_time=param_set.get('max_time', 10.0),
-                    drive_param=param_set.get('drive_param', 0.9),
-                    init_state=param_set.get('init_state', 'superposition'),
-                    param_set_name=param_set_name,
-                    save_results=True,
-                    show_plots=False
-                )
-                
-                # Get the result path for tracking
-                result_path = result.get('result_path', '').split('/')[-1]
-                print(f"✓ Completed simulation {i+1}/{total_sets}: {result_path}")
+                # Create a Flask application context for this simulation
+                with app.app_context():
+                    # Run the simulation - each one will be saved to the database automatically
+                    result = run_simulation(
+                        circuit_type=circuit_type,
+                        qubits=param_set.get('qubits', 3),
+                        shots=param_set.get('shots', 8192),
+                        drive_steps=param_set.get('drive_steps', 5),
+                        time_points=param_set.get('time_points', 100),
+                        max_time=param_set.get('max_time', 10.0),
+                        drive_param=param_set.get('drive_param', 0.9),
+                        init_state=param_set.get('init_state', 'superposition'),
+                        param_set_name=param_set_name,
+                        save_results=True,
+                        show_plots=False
+                    )
+                    
+                    # Get the result path for tracking
+                    results_path = result.get('results_path', '')
+                    result_name = os.path.basename(results_path) if results_path else None
+                    print(f"✓ Completed simulation {i+1}/{total_sets}: {result_name}")
+                    
+                    # Double-check the database saving
+                    if result_name and not result.get('db_record'):
+                        try:
+                            # Ensure it's saved to the database
+                            db_record = save_simulation_to_db(result, result_name)
+                            print(f"Manually saved simulation to database with ID: {db_record.id}")
+                        except Exception as db_err:
+                            print(f"Warning: Could not save to database: {db_err}")
                 
             except Exception as e:
                 print(f"Error running simulation {i+1}/{total_sets}: {str(e)}")
@@ -522,6 +535,7 @@ def run_single_simulation(params):
         
         # Import run_simulation here to avoid circular imports
         from simulation import run_simulation
+        from db_utils import save_simulation_to_db
         
         # Generate a unique random seed for this run
         import random
@@ -552,6 +566,15 @@ def run_single_simulation(params):
             results_path = result.get('results_path', '')
             result_name = os.path.basename(results_path) if results_path else None
             print(f"Simulation completed successfully: {result_name}")
+            
+            # Ensure the result is saved to the database
+            if result_name and not result.get('db_record'):
+                try:
+                    # The simulation module should normally save to DB, but let's double-check
+                    db_record = save_simulation_to_db(result, result_name)
+                    print(f"Manually saved simulation to database with ID: {db_record.id}")
+                except Exception as db_err:
+                    print(f"Warning: Could not save to database: {db_err}")
         
     except Exception as e:
         # If an error occurs, log it
