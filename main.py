@@ -97,9 +97,9 @@ def run_simulation():
                   request.content_type == 'application/json' or
                   request.args.get('format') == 'json')
         
-        # For simulations with more than 300 time points or more than 5 qubits,
+        # For simulations with more than 200 time points or more than 4 qubits,
         # run in background to avoid timeouts
-        if time_points > 300 or qubits > 5:
+        if time_points > 200 or qubits > 4:
             # Generate a unique ID for this simulation
             sim_id = str(uuid.uuid4())
             

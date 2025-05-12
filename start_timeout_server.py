@@ -13,9 +13,10 @@ command = [
     "gunicorn",
     "--bind", "0.0.0.0:5000",
     "--timeout", "300",  # 5 minutes timeout
-    "--workers", "1",
+    "--workers", "1", 
     "--reuse-port",
     "--reload",
+    "--config", "gunicorn_config.py",  # Use our config file
     "main:app"
 ]
 

@@ -1,0 +1,55 @@
+Starting simulation across 300 time points...
+  Completed 30/300 time points (10.0%)
+  Completed 60/300 time points (20.0%)
+  Completed 90/300 time points (30.0%)
+  Completed 120/300 time points (40.0%)
+  Completed 150/300 time points (50.0%)
+  Completed 180/300 time points (60.0%)
+  Completed 210/300 time points (70.0%)
+  Completed 240/300 time points (80.0%)
+[2025-05-12 11:32:45 +0000] [4034] [CRITICAL] WORKER TIMEOUT (pid:4308)
+[2025-05-12 11:32:45 +0000] [4308] [ERROR] Error handling request /run_simulation
+Traceback (most recent call last):
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/gunicorn/workers/sync.py", line 134, in handle
+    self.handle_request(listener, req, client, addr)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/gunicorn/workers/sync.py", line 177, in handle_request
+    respiter = self.wsgi(environ, resp.start_response)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 1536, in __call__
+    return self.wsgi_app(environ, start_response)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/main.py", line 161, in run_simulation
+    result = run_simulation(
+             ^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/simulation.py", line 151, in run_simulation
+    transpiled_circuit = transpile(bound_circuit, simulator)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/qiskit/compiler/transpiler.py", line 269, in transpile
+    pm = generate_preset_pass_manager(
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/qiskit/transpiler/preset_passmanagers/generate_preset_pass_manager.py", line 219, in generate_preset_pass_manager
+    timing_constraints = _parse_timing_constraints(backend)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/qiskit/transpiler/preset_passmanagers/generate_preset_pass_manager.py", line 407, in _parse_timing_constraints
+    timing_constraints = backend.target.timing_constraints()
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/qiskit/transpiler/target.py", line 425, in timing_constraints
+    return TimingConstraints(
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/qiskit/transpiler/timing_constraints.py", line 56, in __init__
+    if not isinstance(value, int) or value < 1:
+                                     ^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2025-05-12 11:32:45 +0000] [4308] [INFO] Worker exiting (pid: 4308)
+[2025-05-12 11:32:45 +0000] [4577] [INFO] Booting worker with pid: 4577

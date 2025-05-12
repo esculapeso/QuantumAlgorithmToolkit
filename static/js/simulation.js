@@ -35,9 +35,25 @@ function handleSimulationFormSubmit(event, form, progressSection, progressBar, p
     })
     .then(response => {
         if (!response.ok) {
-            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+            // Try to parse the error response as JSON first
+            return response.text().then(text => {
+                try {
+                    // See if it's a valid JSON
+                    const json = JSON.parse(text);
+                    throw new Error(json.error || `Server error: ${response.status}`);
+                } catch (jsonError) {
+                    // Not valid JSON, likely HTML error page or timeout
+                    console.error("Server returned non-JSON response:", text);
+                    if (text.includes("WORKER TIMEOUT") || text.includes("504") || text.includes("timeout")) {
+                        throw new Error("The server timed out. Please try with fewer time points (under 200) or check the Simulations page for background jobs.");
+                    } else {
+                        throw new Error("The server returned an HTML error. Try using the background processing option with fewer time points.");
+                    }
+                }
+            });
         }
         
+        // Handle valid response
         return response.json().catch(error => {
             // Handle JSON parsing errors (e.g., if server returned HTML instead of JSON)
             console.error("Failed to parse JSON response:", error);
@@ -85,9 +101,21 @@ function checkProgress(simulationId, progressBar, progressStatus, progressDetail
     fetch(`/simulation_status/${simulationId}`)
         .then(response => {
             if (!response.ok) {
-                throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                // Try to parse the error response as JSON first
+                return response.text().then(text => {
+                    try {
+                        // See if it's a valid JSON
+                        const json = JSON.parse(text);
+                        throw new Error(json.error || `Server error: ${response.status}`);
+                    } catch (jsonError) {
+                        // Not valid JSON, likely HTML error page
+                        console.error("Server returned non-JSON response:", text);
+                        throw new Error("The server returned an HTML error. The simulation may have timed out.");
+                    }
+                });
             }
             
+            // Handle valid response
             return response.json().catch(error => {
                 // Handle JSON parsing errors
                 console.error("Failed to parse JSON from status endpoint:", error);
