@@ -8,6 +8,7 @@ import os
 import sys
 import numpy as np
 import datetime
+import traceback
 
 # Import custom modules
 import config
@@ -335,7 +336,6 @@ def run_parameter_sweep():
             # Redirect to the result page
             return redirect(url_for('view_result', result_name=result_path))
         except Exception as e:
-            import traceback
             print(f"Error running simulation: {str(e)}")
             traceback.print_exc()
             flash(f"Error running simulation: {str(e)}", 'error')
@@ -399,7 +399,6 @@ def run_background_parameter_sweep(sweep_id, circuit_type, parameter_sets, scan_
         
     except Exception as e:
         # If an error occurs, store it in the simulation status
-        import traceback
         error_traceback = traceback.format_exc()
         print(f"Background parameter sweep error: {str(e)}")
         print(error_traceback)  # Print full traceback for debugging
