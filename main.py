@@ -9,6 +9,9 @@ import sys
 import numpy as np
 import datetime
 import traceback
+import threading
+import uuid
+import time
 
 # Import custom modules
 import config
@@ -283,15 +286,7 @@ def run_parameter_sweep():
         # Generate a unique ID for this background job
         scan_id = str(uuid.uuid4())
         
-        # Start background thread to run the parameter scan
-        sweep_thread = threading.Thread(
-            target=run_background_parameter_sweep,
-            args=(scan_id, circuit_type, parameter_sets, scan_name)
-        )
-        sweep_thread.daemon = True
-        sweep_thread.start()
-        
-        # Create a record of the background job
+        # Create a record of the background job FIRST before starting the thread
         BACKGROUND_SIMULATIONS[scan_id] = {
             'status': 'starting',
             'params': {
@@ -303,6 +298,14 @@ def run_parameter_sweep():
             'start_time': time.time(),
             'message': f'Starting parameter sweep with {total_combinations} combinations'
         }
+        
+        # Now start the background thread after the dictionary entry is ready
+        sweep_thread = threading.Thread(
+            target=run_background_parameter_sweep,
+            args=(scan_id, circuit_type, parameter_sets, scan_name)
+        )
+        sweep_thread.daemon = True
+        sweep_thread.start()
         
         # Redirect to simulations page to monitor progress
         return redirect(url_for('view_simulations'))
@@ -344,6 +347,22 @@ def run_parameter_sweep():
 def run_background_parameter_sweep(sweep_id, circuit_type, parameter_sets, scan_name):
     """Run a parameter sweep in the background and update its status."""
     try:
+        # Verify the sweep_id exists in BACKGROUND_SIMULATIONS
+        if sweep_id not in BACKGROUND_SIMULATIONS:
+            print(f"Error: sweep_id {sweep_id} not found in BACKGROUND_SIMULATIONS")
+            # Create the entry if it doesn't exist
+            BACKGROUND_SIMULATIONS[sweep_id] = {
+                'status': 'starting',
+                'params': {
+                    'circuit_type': circuit_type,
+                    'parameter_sets': f"{len(parameter_sets)} parameter combinations",
+                    'scan_name': scan_name
+                },
+                'progress': 0,
+                'start_time': time.time(),
+                'message': f'Starting parameter sweep with {len(parameter_sets)} combinations'
+            }
+            
         # Update status to running
         BACKGROUND_SIMULATIONS[sweep_id]['status'] = 'running'
         BACKGROUND_SIMULATIONS[sweep_id]['message'] = 'Parameter sweep in progress'
@@ -403,18 +422,28 @@ def run_background_parameter_sweep(sweep_id, circuit_type, parameter_sets, scan_
         print(f"Background parameter sweep error: {str(e)}")
         print(error_traceback)  # Print full traceback for debugging
         
-        BACKGROUND_SIMULATIONS[sweep_id]['status'] = 'error'
-        BACKGROUND_SIMULATIONS[sweep_id]['error'] = str(e)
-        BACKGROUND_SIMULATIONS[sweep_id]['message'] = 'Error occurred during parameter sweep'
-        BACKGROUND_SIMULATIONS[sweep_id]['end_time'] = time.time()
+        # Ensure the simulation entry exists before trying to update it
+        if sweep_id not in BACKGROUND_SIMULATIONS:
+            BACKGROUND_SIMULATIONS[sweep_id] = {
+                'status': 'error',
+                'params': {
+                    'circuit_type': circuit_type,
+                    'parameter_sets': f"{len(parameter_sets)} parameter combinations",
+                    'scan_name': scan_name
+                },
+                'progress': 0,
+                'start_time': time.time(),
+                'error': str(e),
+                'message': 'Error occurred during parameter sweep',
+                'end_time': time.time()
+            }
+        else:
+            BACKGROUND_SIMULATIONS[sweep_id]['status'] = 'error'
+            BACKGROUND_SIMULATIONS[sweep_id]['error'] = str(e)
+            BACKGROUND_SIMULATIONS[sweep_id]['message'] = 'Error occurred during parameter sweep'
+            BACKGROUND_SIMULATIONS[sweep_id]['end_time'] = time.time()
 
-import threading
-import uuid
-import time
-import json
 
-# Dictionary to store background simulation status
-BACKGROUND_SIMULATIONS = {}
 
 @app.route('/run_simulation', methods=['POST'])
 def run_simulation():
