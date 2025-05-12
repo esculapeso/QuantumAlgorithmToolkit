@@ -65,7 +65,7 @@
                             <div class="mb-3">
                                 <label for="time_points" class="form-label">Time Points</label>
                                 <input type="number" class="form-control" id="time_points" name="time_points" 
-                                       min="10" max="5000" value="100" required>
+                                       min="10" max="10000" value="100" required>
                                 <div class="form-text">
                                     Number of simulation time points 
                                     <span class="text-warning">(>500 will run in background)</span>
@@ -144,7 +144,12 @@
                                     method: 'POST',
                                     body: formData
                                 })
-                                .then(response => response.json())
+                                .then(response => {
+                                    if (!response.ok) {
+                                        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                                    }
+                                    return response.json();
+                                })
                                 .then(data => {
                                     if (data.error) {
                                         progressStatus.textContent = 'Error';
@@ -161,8 +166,9 @@
                                     checkInterval = setInterval(checkProgress, 1000);
                                 })
                                 .catch(error => {
+                                    console.error('Simulation error:', error);
                                     progressStatus.textContent = 'Error';
-                                    progressDetail.textContent = 'Failed to start simulation: ' + error;
+                                    progressDetail.textContent = 'Failed to start simulation: ' + error.message;
                                     progressSection.classList.remove('alert-info');
                                     progressSection.classList.add('alert-danger');
                                     runButton.disabled = false;
@@ -174,7 +180,12 @@
                             if (!simulationId) return;
                             
                             fetch(`/simulation_status/${simulationId}`)
-                                .then(response => response.json())
+                                .then(response => {
+                                    if (!response.ok) {
+                                        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                                    }
+                                    return response.json();
+                                })
                                 .then(data => {
                                     if (data.error) {
                                         clearInterval(checkInterval);
@@ -211,6 +222,16 @@
                                 })
                                 .catch(error => {
                                     console.error('Error checking status:', error);
+                                    
+                                    // Only show a UI error if we haven't already
+                                    if (progressSection.classList.contains('alert-info')) {
+                                        clearInterval(checkInterval);
+                                        progressStatus.textContent = 'Error';
+                                        progressDetail.textContent = 'Failed to check simulation status: ' + error.message;
+                                        progressSection.classList.remove('alert-info');
+                                        progressSection.classList.add('alert-danger');
+                                        runButton.disabled = false;
+                                    }
                                 });
                         }
                     });
