@@ -428,22 +428,10 @@ def run_simulation():
                 'param_set_name': f"web_{circuit_type}_{qubits}q_{sim_id[:6]}",
             }
             
-            # Store simulation status
-            BACKGROUND_SIMULATIONS[sim_id] = {
-                'id': sim_id,
-                'params': params,
-                'status': 'starting',
-                'progress': 0,
-                'start_time': time.time(),
-                'result_path': None,
-                'error': None,
-                'message': 'Initializing simulation...',
-            }
-            
-            # Start background thread for simulation
+            # Start a thread to run the simulation
             thread = threading.Thread(
-                target=run_background_simulation,
-                args=(sim_id, params)
+                target=run_single_simulation,
+                args=(params,)
             )
             thread.daemon = True
             thread.start()
@@ -451,13 +439,12 @@ def run_simulation():
             if is_ajax:
                 # Return JSON response for AJAX requests
                 return jsonify({
-                    'status': 'pending',
-                    'simulation_id': sim_id,
-                    'message': 'Simulation started in the background'
+                    'status': 'running',
+                    'message': 'Simulation started. It will appear in the Completed Simulations list when finished.'
                 })
             else:
                 # Regular form submission - redirect to the simulations page
-                flash(f'Long simulation started in background. You can check its progress on the simulations page.')
+                flash('Simulation started. It will appear in the Completed Simulations list when finished.', 'info')
                 return redirect(url_for('view_simulations'))
         
         # For smaller simulations, run synchronously as before
@@ -525,16 +512,13 @@ def run_simulation():
             'error': error_message
         }), 500, {'Content-Type': 'application/json'}
 
-def run_background_simulation(sim_id, params):
-    """Run a simulation in the background and update its status."""
+def run_single_simulation(params):
+    """Run a simulation in a separate thread without tracking in a global dictionary."""
     try:
-        # Update status to running
-        BACKGROUND_SIMULATIONS[sim_id]['status'] = 'running'
-        
-        # Create a progress callback to update progress
+        # Create a progress callback to print progress
         def progress_callback(step, total):
             progress = int((step / total) * 100)
-            BACKGROUND_SIMULATIONS[sim_id]['progress'] = progress
+            print(f"Simulation progress: {progress}%")
         
         # Import run_simulation here to avoid circular imports
         from simulation import run_simulation
@@ -543,50 +527,38 @@ def run_background_simulation(sim_id, params):
         import random
         unique_seed = random.randint(10000, 99999)
         
-        # Run the simulation with the progress callback
-        result = run_simulation(
-            circuit_type=params['circuit_type'],
-            qubits=params['qubits'],
-            shots=params['shots'],
-            drive_steps=params['drive_steps'],
-            time_points=params['time_points'],
-            max_time=params['max_time'],
-            drive_param=params['drive_param'],
-            init_state=params['init_state'],
-            param_set_name=params['param_set_name'],
-            save_results=True,
-            show_plots=False,
-            plot_circuit=True,
-            verbose=True,
-            progress_callback=progress_callback,
-            seed=unique_seed
-        )
-        
-        # Update simulation status with the result path
-        results_path = result.get('results_path', '')
-        result_name = os.path.basename(results_path) if results_path else None
-        
-        # Ensure progress is set to 100% when completed
-        BACKGROUND_SIMULATIONS[sim_id]['progress'] = 100
-        BACKGROUND_SIMULATIONS[sim_id]['status'] = 'completed'
-        BACKGROUND_SIMULATIONS[sim_id]['result_path'] = result_name
-        BACKGROUND_SIMULATIONS[sim_id]['end_time'] = time.time()
-        BACKGROUND_SIMULATIONS[sim_id]['message'] = 'Simulation completed successfully'
-        
-        # Log completion
-        print(f"Background simulation {sim_id} completed successfully")
+        # Create an application context for database operations
+        with app.app_context():
+            # Run the simulation with the progress callback
+            result = run_simulation(
+                circuit_type=params['circuit_type'],
+                qubits=params['qubits'],
+                shots=params['shots'],
+                drive_steps=params['drive_steps'],
+                time_points=params['time_points'],
+                max_time=params['max_time'],
+                drive_param=params['drive_param'],
+                init_state=params['init_state'],
+                param_set_name=params['param_set_name'],
+                save_results=True,
+                show_plots=False,
+                plot_circuit=True,
+                verbose=True,
+                progress_callback=progress_callback,
+                seed=unique_seed
+            )
+            
+            # Log completion
+            results_path = result.get('results_path', '')
+            result_name = os.path.basename(results_path) if results_path else None
+            print(f"Simulation completed successfully: {result_name}")
         
     except Exception as e:
-        # If an error occurs, store it in the simulation status
+        # If an error occurs, log it
         import traceback
         error_traceback = traceback.format_exc()
-        print(f"Background simulation error: {str(e)}")
+        print(f"Simulation error: {str(e)}")
         print(error_traceback)  # Print full traceback for debugging
-        
-        BACKGROUND_SIMULATIONS[sim_id]['status'] = 'error'
-        BACKGROUND_SIMULATIONS[sim_id]['error'] = str(e)
-        BACKGROUND_SIMULATIONS[sim_id]['message'] = 'Error occurred during simulation'
-        BACKGROUND_SIMULATIONS[sim_id]['end_time'] = time.time()
 
 @app.route('/simulations')
 def view_simulations():
