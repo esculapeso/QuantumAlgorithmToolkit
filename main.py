@@ -16,7 +16,7 @@ from simulation import run_simulation, run_parameter_scan, generate_parameter_gr
 from visualization import plot_circuit_diagram
 
 # Import Flask web application
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
 import glob
 import json
 
@@ -327,8 +327,11 @@ def view_result(result_name):
                 # Result exists in database, use database data
                 result_path = db_result.results_path
                 
-                # Get list of figure files
+                # Get list of figure files - check figures folder
                 figure_files = glob.glob(os.path.join(result_path, 'figures', '*.png'))
+                if not figure_files:
+                    # As a fallback, check if there are figures directly in the result path
+                    figure_files = glob.glob(os.path.join(result_path, '*.png'))
                 figures = [os.path.basename(f) for f in figure_files]
                 
                 # Build a result data structure from database
@@ -394,8 +397,11 @@ def view_result(result_name):
             with open(result_data_path, 'r') as f:
                 result_data = json.load(f)
         
-        # Get list of figure files
+        # Get list of figure files - check figures folder
         figure_files = glob.glob(os.path.join(result_path, 'figures', '*.png'))
+        if not figure_files:
+            # As a fallback, check if there are figures directly in the result path
+            figure_files = glob.glob(os.path.join(result_path, '*.png'))
         figures = [os.path.basename(f) for f in figure_files]
         
         # Get data about the time crystal and frequency comb detection
@@ -423,21 +429,34 @@ def get_figure(result_name, figure_name):
         db_result = get_simulation_by_name(result_name)
         
         if db_result and db_result.results_path:
-            # Create a path relative to the static folder
-            figure_path = os.path.join(db_result.results_path, 'figures', figure_name)
+            result_path = db_result.results_path
+            
+            # Check in figures subfolder first
+            figure_path = os.path.join(result_path, 'figures', figure_name)
             if os.path.exists(figure_path):
-                # Convert absolute path to relative for url_for
-                rel_path = os.path.relpath(figure_path, 'static')
-                if rel_path.startswith('..'):
-                    # It's outside the static folder, so use relative to root
-                    return redirect(f'/static/../{os.path.relpath(figure_path)}')
-                else:
-                    return redirect(url_for('static', filename=rel_path))
+                return send_file(figure_path)
+            
+            # Check directly in results path as fallback
+            figure_path = os.path.join(result_path, figure_name)
+            if os.path.exists(figure_path):
+                return send_file(figure_path)
     except Exception as e:
         print(f"Error retrieving figure from database: {e}")
     
-    # Fall back to default location if not found in database
-    return redirect(url_for('static', filename=f'../results/{result_name}/figures/{figure_name}'))
+    # Fall back to default locations if not found in database
+    
+    # Try finding in the figures subfolder
+    figure_path = os.path.join('results', result_name, 'figures', figure_name)
+    if os.path.exists(figure_path):
+        return send_file(figure_path)
+    
+    # Try finding directly in the results folder
+    figure_path = os.path.join('results', result_name, figure_name)
+    if os.path.exists(figure_path):
+        return send_file(figure_path)
+    
+    # If all fails, return a 404
+    return f"Figure {figure_name} not found", 404
 
 def main():
     """Main function to run simulations."""

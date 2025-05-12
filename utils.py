@@ -88,12 +88,16 @@ def create_folder_structure(circuit_type, param_set_name):
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     folder_name = f"{circuit_type}_{param_set_name}_{timestamp}"
     
-    fig_path = os.path.join(config.FIGURES_BASE_PATH, folder_name)
+    # Create primary result folder
     res_path = os.path.join(config.RESULTS_BASE_PATH, folder_name)
-    data_path = os.path.join(config.NUMERIC_DATA_BASE_PATH, folder_name)
-    
-    os.makedirs(fig_path, exist_ok=True)
     os.makedirs(res_path, exist_ok=True)
+    
+    # Create figures subfolder directly in the results path
+    fig_path = os.path.join(res_path, 'figures')
+    os.makedirs(fig_path, exist_ok=True)
+    
+    # Create data folder
+    data_path = os.path.join(config.NUMERIC_DATA_BASE_PATH, folder_name)
     os.makedirs(data_path, exist_ok=True)
     
     return fig_path, res_path, data_path

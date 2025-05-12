@@ -7,6 +7,9 @@ import numpy as np
 # Configure matplotlib to use a non-interactive backend (avoid 'main thread' warnings)
 import matplotlib
 matplotlib.use('Agg')  # Must be before importing pyplot
+# Set non-interactive backend first to avoid "Matplotlib GUI outside the main thread" warnings
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import os
 import json
