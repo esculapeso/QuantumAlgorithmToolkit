@@ -285,33 +285,20 @@ def run_parameter_sweep():
     if total_combinations > 1:
         large_simulation = True
     
-    # If this is going to be a large simulation, run in background
+    # If we have multiple simulations, run them sequentially
     if large_simulation:
-        # Generate a unique ID for this background job
-        scan_id = str(uuid.uuid4())
-        
-        # Create a record of the background job FIRST before starting the thread
-        BACKGROUND_SIMULATIONS[scan_id] = {
-            'status': 'starting',
-            'params': {
-                'circuit_type': circuit_type,
-                'parameter_sets': f"{total_combinations} parameter combinations",
-                'scan_name': scan_name
-            },
-            'progress': 0,
-            'start_time': time.time(),
-            'message': f'Starting parameter sweep with {total_combinations} combinations'
-        }
-        
-        # Now start the background thread after the dictionary entry is ready
+        # Start a background thread to run all simulations sequentially
         sweep_thread = threading.Thread(
-            target=run_background_parameter_sweep,
-            args=(scan_id, circuit_type, parameter_sets, scan_name)
+            target=run_sequential_simulations,
+            args=(circuit_type, parameter_sets, scan_name)
         )
         sweep_thread.daemon = True
         sweep_thread.start()
         
-        # Redirect to simulations page to monitor progress
+        # Inform the user that simulations are running
+        flash(f"Started running {total_combinations} simulations sequentially. Each will appear in the 'Completed Simulations' list when finished.", "info")
+        
+        # Redirect to simulations page to monitor results
         return redirect(url_for('view_simulations'))
     else:
         # For a single parameter set, just run it directly
@@ -348,53 +335,31 @@ def run_parameter_sweep():
             flash(f"Error running simulation: {str(e)}", 'error')
             return redirect(url_for('parameter_sweep'))
             
-def run_background_parameter_sweep(sweep_id, circuit_type, parameter_sets, scan_name):
-    """Run a parameter sweep in the background and update its status."""
+def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
+    """Run multiple simulations sequentially, one after another."""
     try:
-        # Verify the sweep_id exists in BACKGROUND_SIMULATIONS
-        if sweep_id not in BACKGROUND_SIMULATIONS:
-            print(f"Error: sweep_id {sweep_id} not found in BACKGROUND_SIMULATIONS")
-            # Create the entry if it doesn't exist
-            BACKGROUND_SIMULATIONS[sweep_id] = {
-                'status': 'starting',
-                'params': {
-                    'circuit_type': circuit_type,
-                    'parameter_sets': f"{len(parameter_sets)} parameter combinations",
-                    'scan_name': scan_name
-                },
-                'progress': 0,
-                'start_time': time.time(),
-                'message': f'Starting parameter sweep with {len(parameter_sets)} combinations'
-            }
-            
-        # Update status to running
-        BACKGROUND_SIMULATIONS[sweep_id]['status'] = 'running'
-        BACKGROUND_SIMULATIONS[sweep_id]['message'] = 'Parameter sweep in progress'
-        
         # Count of total parameter sets
         total_sets = len(parameter_sets)
+        print(f"Starting sequential simulation run with {total_sets} parameter combinations")
         
-        # Run the parameter scan
-        results = []
+        # Run each simulation independently
         for i, param_set in enumerate(parameter_sets):
-            # Update progress
-            progress = int((i / total_sets) * 100)
-            BACKGROUND_SIMULATIONS[sweep_id]['progress'] = progress
-            BACKGROUND_SIMULATIONS[sweep_id]['message'] = f'Processing combination {i+1}/{total_sets} ({progress}%)'
-            
-            # Generate a unique name for this parameter set
-            # Include some key parameter values in the name
-            qubits = param_set.get('qubits', 3)
-            time_points = param_set.get('time_points', 100)
-            drive_param = param_set.get('drive_param', 0.9)
-            param_suffix = f"{qubits}q_{time_points}tp_d{drive_param:.1f}"
-            
-            param_set_name = f"{scan_name}_{i+1}_{param_suffix}"
-            
             try:
-                # Run the simulation - it will save itself to the database automatically
+                # Generate a descriptive name for this parameter set
+                qubits = param_set.get('qubits', 3)
+                time_points = param_set.get('time_points', 100)
+                drive_param = param_set.get('drive_param', 0.9)
+                param_suffix = f"{qubits}q_{time_points}tp_d{drive_param:.1f}"
+                
+                param_set_name = f"{scan_name}_{i+1}_{param_suffix}"
+                
+                print(f"Running simulation {i+1}/{total_sets} with parameters: " + 
+                      f"qubits={qubits}, time_points={time_points}, drive_param={drive_param}")
+                
+                # Import here to avoid circular imports
                 from simulation import run_simulation
                 
+                # Run the simulation - each one will be saved to the database automatically
                 result = run_simulation(
                     circuit_type=circuit_type,
                     qubits=param_set.get('qubits', 3),
@@ -411,51 +376,18 @@ def run_background_parameter_sweep(sweep_id, circuit_type, parameter_sets, scan_
                 
                 # Get the result path for tracking
                 result_path = result.get('result_path', '').split('/')[-1]
-                print(f"Completed simulation {i+1}/{total_sets}: {result_path}")
+                print(f"✓ Completed simulation {i+1}/{total_sets}: {result_path}")
                 
-                results.append(result)
             except Exception as e:
-                print(f"Error running parameter set {i+1}/{total_sets}: {str(e)}")
+                print(f"Error running simulation {i+1}/{total_sets}: {str(e)}")
                 traceback.print_exc()
-                # Continue with next parameter set
+                # Continue with next simulation regardless of errors
         
-        # Update status to completed
-        BACKGROUND_SIMULATIONS[sweep_id]['status'] = 'complete'
-        BACKGROUND_SIMULATIONS[sweep_id]['progress'] = 100
-        BACKGROUND_SIMULATIONS[sweep_id]['message'] = f'Parameter sweep completed with {len(results)} successful simulations'
-        BACKGROUND_SIMULATIONS[sweep_id]['end_time'] = time.time()
-        BACKGROUND_SIMULATIONS[sweep_id]['result_count'] = len(results)
-        
-        # Clean up the background job after a few minutes - we don't need to keep it around
-        # since individual simulations are now showing in the Completed Simulations list
-        print(f"Parameter sweep completed with {len(results)} simulations. Each simulation appears in the 'Completed Simulations' list.")
+        print(f"✓ Completed all {total_sets} simulations. Each appears in the 'Completed Simulations' list.")
         
     except Exception as e:
-        # If an error occurs, store it in the simulation status
-        error_traceback = traceback.format_exc()
-        print(f"Background parameter sweep error: {str(e)}")
-        print(error_traceback)  # Print full traceback for debugging
-        
-        # Ensure the simulation entry exists before trying to update it
-        if sweep_id not in BACKGROUND_SIMULATIONS:
-            BACKGROUND_SIMULATIONS[sweep_id] = {
-                'status': 'error',
-                'params': {
-                    'circuit_type': circuit_type,
-                    'parameter_sets': f"{len(parameter_sets)} parameter combinations",
-                    'scan_name': scan_name
-                },
-                'progress': 0,
-                'start_time': time.time(),
-                'error': str(e),
-                'message': 'Error occurred during parameter sweep',
-                'end_time': time.time()
-            }
-        else:
-            BACKGROUND_SIMULATIONS[sweep_id]['status'] = 'error'
-            BACKGROUND_SIMULATIONS[sweep_id]['error'] = str(e)
-            BACKGROUND_SIMULATIONS[sweep_id]['message'] = 'Error occurred during parameter sweep'
-            BACKGROUND_SIMULATIONS[sweep_id]['end_time'] = time.time()
+        print(f"Error in sequential simulation run: {str(e)}")
+        traceback.print_exc()
 
 
 
@@ -680,33 +612,8 @@ def view_simulations():
     if request.args.get('comb_detected'):
         filters['comb_detected'] = comb_detected
     
-    # Get background jobs (in-progress simulations)
-    background_jobs = []
-    for sim_id, sim_data in BACKGROUND_SIMULATIONS.items():
-        try:
-            params = sim_data.get('params', {})
-            job_info = {
-                'id': sim_id,
-                'circuit_type': params.get('circuit_type', 'unknown'),
-                'status': sim_data.get('status', 'unknown'),
-                'progress': sim_data.get('progress', 0),
-                'message': sim_data.get('message', ''),
-                'is_background_job': True,
-                'result_paths': sim_data.get('result_paths', [])
-            }
-            
-            # Parameter sweep might store info differently
-            if 'parameter_sets' in params:
-                job_info['qubits'] = 'multiple'
-                job_info['time_points'] = 'multiple'
-                job_info['circuit_type'] = f"{params.get('circuit_type', 'unknown')} (sweep)"
-            else:
-                job_info['qubits'] = params.get('qubits', 'unknown')
-                job_info['time_points'] = params.get('time_points', 'unknown')
-                
-            background_jobs.append(job_info)
-        except Exception as e:
-            print(f"Error processing background job {sim_id}: {str(e)}")
+    # We no longer track background jobs - all simulations appear directly in the database
+    # This simplifies the UI and makes it clearer what's happening
     
     # Get database results
     try:
