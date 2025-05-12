@@ -326,9 +326,15 @@ def run_background_simulation(sim_id, params):
         results_path = result.get('results_path', '')
         result_name = os.path.basename(results_path) if results_path else None
         
+        # Ensure progress is set to 100% when completed
+        BACKGROUND_SIMULATIONS[sim_id]['progress'] = 100
         BACKGROUND_SIMULATIONS[sim_id]['status'] = 'completed'
         BACKGROUND_SIMULATIONS[sim_id]['result_path'] = result_name
         BACKGROUND_SIMULATIONS[sim_id]['end_time'] = time.time()
+        BACKGROUND_SIMULATIONS[sim_id]['message'] = 'Simulation completed successfully'
+        
+        # Log completion
+        print(f"Background simulation {sim_id} completed successfully")
         
     except Exception as e:
         # If an error occurs, store it in the simulation status

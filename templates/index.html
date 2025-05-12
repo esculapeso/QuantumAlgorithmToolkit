@@ -27,7 +27,7 @@
                                        min="1" max="10" value="3" required>
                                 <div class="form-text">
                                     More qubits = more complex simulation
-                                    <span class="text-warning">(>5 will run in background)</span>
+                                    <span class="text-warning">(>3 will run in background)</span>
                                 </div>
                             </div>
                         </div>
@@ -68,7 +68,7 @@
                                        min="10" max="10000" value="100" required>
                                 <div class="form-text">
                                     Number of simulation time points 
-                                    <span class="text-warning">(>200 will run in background)</span>
+                                    <span class="text-warning">(>100 will run in background)</span>
                                 </div>
                                 <div class="form-text alert alert-info mt-2 p-2 small">
                                     <strong>Note:</strong> For simulations with 300+ time points, you should use the 
@@ -131,7 +131,7 @@
                             const qubits = parseInt(document.getElementById('qubits').value);
                             const timePoints = parseInt(document.getElementById('time_points').value);
                             
-                            if (qubits > 5 || timePoints > 500) {
+                            if (qubits > 3 || timePoints > 100) {
                                 e.preventDefault();
                                 
                                 // Show progress section
