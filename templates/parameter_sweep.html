@@ -1,0 +1,348 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary-subtle">
+                <h5 class="card-title mb-0">Parameter Sweep</h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-4">
+                    Run multiple simulations across ranges of parameters. For each parameter you want to vary, 
+                    specify a range (min and max) and the number of steps. The system will generate simulations 
+                    for all combinations of the specified parameter values.
+                </p>
+                
+                <form action="/run_parameter_sweep" method="post" id="sweep-form">
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2">Base Configuration</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="circuit_type" class="form-label">Circuit Type</label>
+                                    <select class="form-select" id="circuit_type" name="circuit_type" required>
+                                        {% for circuit in circuit_types %}
+                                        <option value="{{ circuit.id }}">{{ circuit.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="form-text">Select the quantum circuit algorithm to simulate.</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="init_state" class="form-label">Initial State</label>
+                                    <select class="form-select" id="init_state" name="init_state">
+                                        <option value="superposition">Superposition (Default)</option>
+                                        <option value="|00..0>">|00..0> (All Zeros)</option>
+                                        <option value="|11..1>">|11..1> (All Ones)</option>
+                                    </select>
+                                    <div class="form-text">Initial quantum state for the simulation</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2">Parameter Ranges</h6>
+                        <div class="alert alert-info">
+                            <p>For each parameter you want to vary, check the "Sweep" box and specify min, max, and number of steps. 
+                            Parameters without "Sweep" checked will use the fixed value for all simulations.</p>
+                        </div>
+                        
+                        <!-- Qubits Parameter -->
+                        <div class="row mb-3 align-items-end param-row">
+                            <div class="col-md-2">
+                                <div class="form-check">
+                                    <input class="form-check-input sweep-toggle" type="checkbox" name="sweep_qubits" id="sweep_qubits">
+                                    <label class="form-check-label fw-bold" for="sweep_qubits">
+                                        Qubits
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <label for="qubits" class="form-label">Fixed Value</label>
+                                <input type="number" class="form-control" id="qubits" name="qubits" min="1" max="10" value="3" required>
+                            </div>
+                            <div class="col-md-8 sweep-controls d-none" id="qubits_range">
+                                <div class="row">
+                                    <div class="col-sm-4">
+                                        <label for="qubits_min" class="form-label">Min</label>
+                                        <input type="number" class="form-control" id="qubits_min" name="qubits_min" min="1" max="9" value="1">
+                                    </div>
+                                    <div class="col-sm-4">
+                                        <label for="qubits_max" class="form-label">Max</label>
+                                        <input type="number" class="form-control" id="qubits_max" name="qubits_max" min="2" max="10" value="6">
+                                    </div>
+                                    <div class="col-sm-4">
+                                        <label for="qubits_steps" class="form-label">Steps</label>
+                                        <input type="number" class="form-control" id="qubits_steps" name="qubits_steps" min="2" max="6" value="3">
+                                    </div>
+                                </div>
+                                <div class="form-text mt-2">Note: Values will be rounded to integers. Simulations with > 3 qubits will run in background.</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Shots Parameter -->
+                        <div class="row mb-3 align-items-end param-row">
+                            <div class="col-md-2">
+                                <div class="form-check">
+                                    <input class="form-check-input sweep-toggle" type="checkbox" name="sweep_shots" id="sweep_shots">
+                                    <label class="form-check-label fw-bold" for="sweep_shots">
+                                        Shots
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <label for="shots" class="form-label">Fixed Value</label>
+                                <input type="number" class="form-control" id="shots" name="shots" min="1" max="20000" value="8192" required>
+                            </div>
+                            <div class="col-md-8 sweep-controls d-none" id="shots_range">
+                                <div class="row">
+                                    <div class="col-sm-4">
+                                        <label for="shots_min" class="form-label">Min</label>
+                                        <input type="number" class="form-control" id="shots_min" name="shots_min" min="100" max="10000" value="1000">
+                                    </div>
+                                    <div class="col-sm-4">
+                                        <label for="shots_max" class="form-label">Max</label>
+                                        <input type="number" class="form-control" id="shots_max" name="shots_max" min="1000" max="20000" value="10000">
+                                    </div>
+                                    <div class="col-sm-4">
+                                        <label for="shots_steps" class="form-label">Steps</label>
+                                        <input type="number" class="form-control" id="shots_steps" name="shots_steps" min="2" max="10" value="3">
+                                    </div>
+                                </div>
+                                <div class="form-text mt-2">Note: Values will be rounded to integers.</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Drive Steps Parameter -->
+                        <div class="row mb-3 align-items-end param-row">
+                            <div class="col-md-2">
+                                <div class="form-check">
+                                    <input class="form-check-input sweep-toggle" type="checkbox" name="sweep_drive_steps" id="sweep_drive_steps">
+                                    <label class="form-check-label fw-bold" for="sweep_drive_steps">
+                                        Drive Steps
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <label for="drive_steps" class="form-label">Fixed Value</label>
+                                <input type="number" class="form-control" id="drive_steps" name="drive_steps" min="1" max="20" value="5" required>
+                            </div>
+                            <div class="col-md-8 sweep-controls d-none" id="drive_steps_range">
+                                <div class="row">
+                                    <div class="col-sm-4">
+                                        <label for="drive_steps_min" class="form-label">Min</label>
+                                        <input type="number" class="form-control" id="drive_steps_min" name="drive_steps_min" min="1" max="10" value="1">
+                                    </div>
+                                    <div class="col-sm-4">
+                                        <label for="drive_steps_max" class="form-label">Max</label>
+                                        <input type="number" class="form-control" id="drive_steps_max" name="drive_steps_max" min="2" max="20" value="10">
+                                    </div>
+                                    <div class="col-sm-4">
+                                        <label for="drive_steps_steps" class="form-label">Steps</label>
+                                        <input type="number" class="form-control" id="drive_steps_steps" name="drive_steps_steps" min="2" max="10" value="5">
+                                    </div>
+                                </div>
+                                <div class="form-text mt-2">Note: Values will be rounded to integers.</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Drive Parameter -->
+                        <div class="row mb-3 align-items-end param-row">
+                            <div class="col-md-2">
+                                <div class="form-check">
+                                    <input class="form-check-input sweep-toggle" type="checkbox" name="sweep_drive_param" id="sweep_drive_param">
+                                    <label class="form-check-label fw-bold" for="sweep_drive_param">
+                                        Drive Parameter
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <label for="drive_param" class="form-label">Fixed Value</label>
+                                <input type="number" class="form-control" id="drive_param" name="drive_param" min="0.1" max="2.0" step="0.1" value="0.9" required>
+                            </div>
+                            <div class="col-md-8 sweep-controls d-none" id="drive_param_range">
+                                <div class="row">
+                                    <div class="col-sm-4">
+                                        <label for="drive_param_min" class="form-label">Min</label>
+                                        <input type="number" class="form-control" id="drive_param_min" name="drive_param_min" min="0.1" max="1.5" step="0.1" value="0.1">
+                                    </div>
+                                    <div class="col-sm-4">
+                                        <label for="drive_param_max" class="form-label">Max</label>
+                                        <input type="number" class="form-control" id="drive_param_max" name="drive_param_max" min="0.2" max="2.0" step="0.1" value="1.5">
+                                    </div>
+                                    <div class="col-sm-4">
+                                        <label for="drive_param_steps" class="form-label">Steps</label>
+                                        <input type="number" class="form-control" id="drive_param_steps" name="drive_param_steps" min="2" max="15" value="5">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Time Points Parameter -->
+                        <div class="row mb-3 align-items-end param-row">
+                            <div class="col-md-2">
+                                <div class="form-check">
+                                    <input class="form-check-input sweep-toggle" type="checkbox" name="sweep_time_points" id="sweep_time_points">
+                                    <label class="form-check-label fw-bold" for="sweep_time_points">
+                                        Time Points
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <label for="time_points" class="form-label">Fixed Value</label>
+                                <input type="number" class="form-control" id="time_points" name="time_points" min="10" max="10000" value="100" required>
+                            </div>
+                            <div class="col-md-8 sweep-controls d-none" id="time_points_range">
+                                <div class="row">
+                                    <div class="col-sm-4">
+                                        <label for="time_points_min" class="form-label">Min</label>
+                                        <input type="number" class="form-control" id="time_points_min" name="time_points_min" min="10" max="500" value="50">
+                                    </div>
+                                    <div class="col-sm-4">
+                                        <label for="time_points_max" class="form-label">Max</label>
+                                        <input type="number" class="form-control" id="time_points_max" name="time_points_max" min="50" max="1000" value="300">
+                                    </div>
+                                    <div class="col-sm-4">
+                                        <label for="time_points_steps" class="form-label">Steps</label>
+                                        <input type="number" class="form-control" id="time_points_steps" name="time_points_steps" min="2" max="10" value="3">
+                                    </div>
+                                </div>
+                                <div class="form-text mt-2">Note: Values will be rounded to integers. Simulations with >100 time points will run in background.</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Max Time Parameter -->
+                        <div class="row mb-3 align-items-end param-row">
+                            <div class="col-md-2">
+                                <div class="form-check">
+                                    <input class="form-check-input sweep-toggle" type="checkbox" name="sweep_max_time" id="sweep_max_time">
+                                    <label class="form-check-label fw-bold" for="sweep_max_time">
+                                        Max Time
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <label for="max_time" class="form-label">Fixed Value</label>
+                                <input type="number" class="form-control" id="max_time" name="max_time" min="1" max="50" step="0.5" value="10.0" required>
+                            </div>
+                            <div class="col-md-8 sweep-controls d-none" id="max_time_range">
+                                <div class="row">
+                                    <div class="col-sm-4">
+                                        <label for="max_time_min" class="form-label">Min</label>
+                                        <input type="number" class="form-control" id="max_time_min" name="max_time_min" min="1" max="30" step="0.5" value="5.0">
+                                    </div>
+                                    <div class="col-sm-4">
+                                        <label for="max_time_max" class="form-label">Max</label>
+                                        <input type="number" class="form-control" id="max_time_max" name="max_time_max" min="2" max="50" step="0.5" value="20.0">
+                                    </div>
+                                    <div class="col-sm-4">
+                                        <label for="max_time_steps" class="form-label">Steps</label>
+                                        <input type="number" class="form-control" id="max_time_steps" name="max_time_steps" min="2" max="10" value="4">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2">Sweep Configuration</h6>
+                        <div class="row align-items-end">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="scan_name" class="form-label">Scan Name</label>
+                                    <input type="text" class="form-control" id="scan_name" name="scan_name" 
+                                           value="parameter_scan_{{ now.strftime('%Y%m%d') }}" required>
+                                    <div class="form-text">A name to identify this parameter sweep</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="alert alert-warning" id="combinations-warning">
+                                <div id="combination-count">Calculating combinations...</div>
+                                <div id="combination-warning" class="d-none">Warning: Large number of combinations will take a long time to process.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <button type="submit" class="btn btn-primary" id="run-sweep-button">
+                                Start Parameter Sweep
+                            </button>
+                            <a href="/" class="btn btn-outline-secondary ms-2">Cancel</a>
+                        </div>
+                    </div>
+                </form>
+                
+                <!-- Add JavaScript for dynamic form behavior -->
+                <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        // Handle sweep toggles
+                        const sweepToggles = document.querySelectorAll('.sweep-toggle');
+                        sweepToggles.forEach(toggle => {
+                            toggle.addEventListener('change', function() {
+                                const paramName = this.id.replace('sweep_', '');
+                                const rangeControls = document.getElementById(paramName + '_range');
+                                const fixedInput = document.getElementById(paramName);
+                                
+                                if (this.checked) {
+                                    rangeControls.classList.remove('d-none');
+                                    fixedInput.disabled = true;
+                                } else {
+                                    rangeControls.classList.add('d-none');
+                                    fixedInput.disabled = false;
+                                }
+                                
+                                updateCombinationCount();
+                            });
+                        });
+                        
+                        // Listen for changes in any input that would affect the combination count
+                        const allInputs = document.querySelectorAll('input[type="number"]');
+                        allInputs.forEach(input => {
+                            input.addEventListener('change', updateCombinationCount);
+                        });
+                        
+                        // Initial calculation
+                        updateCombinationCount();
+                        
+                        // Function to calculate number of parameter combinations
+                        function updateCombinationCount() {
+                            let totalCombinations = 1;
+                            const params = ['qubits', 'shots', 'drive_steps', 'drive_param', 'time_points', 'max_time'];
+                            
+                            params.forEach(param => {
+                                const sweepEnabled = document.getElementById('sweep_' + param).checked;
+                                
+                                if (sweepEnabled) {
+                                    const steps = parseInt(document.getElementById(param + '_steps').value);
+                                    totalCombinations *= steps;
+                                }
+                            });
+                            
+                            // Update the UI
+                            const countElement = document.getElementById('combination-count');
+                            const warningElement = document.getElementById('combination-warning');
+                            
+                            countElement.textContent = `Total parameter combinations: ${totalCombinations}`;
+                            
+                            if (totalCombinations > 50) {
+                                warningElement.classList.remove('d-none');
+                                warningElement.textContent = `Warning: ${totalCombinations} combinations will take a significant amount of processing time. Consider reducing the number of combinations.`;
+                            } else if (totalCombinations > 20) {
+                                warningElement.classList.remove('d-none');
+                                warningElement.textContent = `Note: ${totalCombinations} combinations may take several minutes to complete.`;
+                            } else {
+                                warningElement.classList.add('d-none');
+                            }
+                        }
+                    });
+                </script>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

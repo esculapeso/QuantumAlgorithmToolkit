@@ -7,6 +7,7 @@ This module also exposes the necessary functions for the web interface.
 import os
 import sys
 import numpy as np
+import datetime
 
 # Import custom modules
 import config
@@ -187,6 +188,226 @@ def index():
                           incommensurate_count=incommensurate_count,
                           circuit_types=circuit_types,
                           default_params=config.DEFAULT_SIMULATION_PARAMS)
+                          
+@app.route('/parameter_sweep')
+def parameter_sweep():
+    """Render the parameter sweep page."""
+    # Available circuit types
+    circuit_types = [
+        {"id": "penrose", "name": "Penrose-inspired Circuit"},
+        {"id": "qft_basic", "name": "QFT Basic Circuit"},
+        {"id": "comb_generator", "name": "Frequency Comb Generator"},
+        {"id": "comb_twistor", "name": "Twistor-inspired Comb Circuit"},
+        {"id": "graphene_fc", "name": "Graphene Lattice Circuit"}
+    ]
+    
+    # Current timestamp for default scan name
+    now = datetime.datetime.now()
+    
+    return render_template('parameter_sweep.html',
+                          circuit_types=circuit_types,
+                          now=now,
+                          default_params=config.DEFAULT_SIMULATION_PARAMS)
+                          
+@app.route('/run_parameter_sweep', methods=['POST'])
+def run_parameter_sweep():
+    """Run a parameter sweep with the provided parameters."""
+    # Extract base configuration
+    circuit_type = request.form.get('circuit_type')
+    scan_name = request.form.get('scan_name', f'param_sweep_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}')
+    init_state = request.form.get('init_state', 'superposition')
+    
+    # Parameter ranges and steps
+    param_ranges = {}
+    
+    # Process each parameter that could be swept
+    params = [
+        {'name': 'qubits', 'type': int, 'min': 1, 'max': 10},
+        {'name': 'shots', 'type': int, 'min': 1, 'max': 20000},
+        {'name': 'drive_steps', 'type': int, 'min': 1, 'max': 20},
+        {'name': 'drive_param', 'type': float, 'min': 0.1, 'max': 2.0},
+        {'name': 'time_points', 'type': int, 'min': 10, 'max': 10000},
+        {'name': 'max_time', 'type': float, 'min': 1.0, 'max': 50.0}
+    ]
+    
+    # For each parameter, check if it's being swept
+    for param in params:
+        name = param['name']
+        param_type = param['type']
+        
+        if request.form.get(f'sweep_{name}') == 'on':
+            # Parameter is being swept, get min, max, and steps
+            min_val = param_type(float(request.form.get(f'{name}_min', param['min'])))
+            max_val = param_type(float(request.form.get(f'{name}_max', param['max'])))
+            steps = int(request.form.get(f'{name}_steps', 3))
+            
+            # Generate the range values
+            if param_type == int:
+                # For integers, ensure we get the right number of steps
+                if steps <= 1:
+                    # Only one value in range
+                    values = [min_val]
+                else:
+                    # Generate evenly spaced integer values
+                    step_size = (max_val - min_val) / (steps - 1)
+                    values = [int(min_val + i * step_size) for i in range(steps)]
+                    # Ensure unique values
+                    values = sorted(list(set(values)))
+            else:
+                # For floats, use numpy linspace
+                values = np.linspace(min_val, max_val, steps).tolist()
+            
+            param_ranges[name] = values
+        else:
+            # Parameter is fixed, use the single value
+            fixed_val = param_type(float(request.form.get(name, param['min'])))
+            param_ranges[name] = [fixed_val]
+    
+    # Generate all parameter combinations
+    parameter_sets = generate_parameter_grid(**param_ranges)
+    
+    # Add init_state to each parameter set
+    for param_set in parameter_sets:
+        param_set['init_state'] = init_state
+    
+    # Calculate if this will run in background
+    large_simulation = False
+    total_combinations = len(parameter_sets)
+    
+    if total_combinations > 1:
+        large_simulation = True
+    
+    # If this is going to be a large simulation, run in background
+    if large_simulation:
+        # Generate a unique ID for this background job
+        scan_id = str(uuid.uuid4())
+        
+        # Start background thread to run the parameter scan
+        sweep_thread = threading.Thread(
+            target=run_background_parameter_sweep,
+            args=(scan_id, circuit_type, parameter_sets, scan_name)
+        )
+        sweep_thread.daemon = True
+        sweep_thread.start()
+        
+        # Create a record of the background job
+        BACKGROUND_SIMULATIONS[scan_id] = {
+            'status': 'starting',
+            'params': {
+                'circuit_type': circuit_type,
+                'parameter_sets': f"{total_combinations} parameter combinations",
+                'scan_name': scan_name
+            },
+            'progress': 0,
+            'start_time': time.time(),
+            'message': f'Starting parameter sweep with {total_combinations} combinations'
+        }
+        
+        # Redirect to simulations page to monitor progress
+        return redirect(url_for('view_simulations'))
+    else:
+        # For a single parameter set, just run it directly
+        try:
+            # Run the simulation with the provided parameters
+            from simulation import run_simulation
+            
+            # Get the first (and only) parameter set
+            param_set = parameter_sets[0]
+            
+            # Run the simulation
+            result = run_simulation(
+                circuit_type=circuit_type,
+                qubits=param_set.get('qubits', 3),
+                shots=param_set.get('shots', 8192),
+                drive_steps=param_set.get('drive_steps', 5),
+                time_points=param_set.get('time_points', 100),
+                max_time=param_set.get('max_time', 10.0),
+                drive_param=param_set.get('drive_param', 0.9),
+                init_state=param_set.get('init_state', 'superposition'),
+                param_set_name=scan_name,
+                save_results=True,
+                show_plots=False
+            )
+            
+            # Get the result path to redirect to
+            result_path = result.get('result_path', '').split('/')[-1]
+            
+            # Redirect to the result page
+            return redirect(url_for('view_result', result_name=result_path))
+        except Exception as e:
+            import traceback
+            print(f"Error running simulation: {str(e)}")
+            traceback.print_exc()
+            flash(f"Error running simulation: {str(e)}", 'error')
+            return redirect(url_for('parameter_sweep'))
+            
+def run_background_parameter_sweep(sweep_id, circuit_type, parameter_sets, scan_name):
+    """Run a parameter sweep in the background and update its status."""
+    try:
+        # Update status to running
+        BACKGROUND_SIMULATIONS[sweep_id]['status'] = 'running'
+        BACKGROUND_SIMULATIONS[sweep_id]['message'] = 'Parameter sweep in progress'
+        
+        # Count of total parameter sets
+        total_sets = len(parameter_sets)
+        
+        # Run the parameter scan
+        results = []
+        for i, param_set in enumerate(parameter_sets):
+            # Update progress
+            progress = int((i / total_sets) * 100)
+            BACKGROUND_SIMULATIONS[sweep_id]['progress'] = progress
+            BACKGROUND_SIMULATIONS[sweep_id]['message'] = f'Processing combination {i+1}/{total_sets} ({progress}%)'
+            
+            # Generate a unique name for this parameter set
+            # Include some key parameter values in the name
+            qubits = param_set.get('qubits', 3)
+            time_points = param_set.get('time_points', 100)
+            drive_param = param_set.get('drive_param', 0.9)
+            param_suffix = f"{qubits}q_{time_points}tp_d{drive_param:.1f}"
+            
+            param_set_name = f"{scan_name}_{i+1}_{param_suffix}"
+            
+            try:
+                # Run the simulation
+                from simulation import run_simulation
+                result = run_simulation(
+                    circuit_type=circuit_type,
+                    qubits=param_set.get('qubits', 3),
+                    shots=param_set.get('shots', 8192),
+                    drive_steps=param_set.get('drive_steps', 5),
+                    time_points=param_set.get('time_points', 100),
+                    max_time=param_set.get('max_time', 10.0),
+                    drive_param=param_set.get('drive_param', 0.9),
+                    init_state=param_set.get('init_state', 'superposition'),
+                    param_set_name=param_set_name,
+                    save_results=True,
+                    show_plots=False
+                )
+                results.append(result)
+            except Exception as e:
+                print(f"Error running parameter set {i+1}/{total_sets}: {str(e)}")
+                traceback.print_exc()
+                # Continue with next parameter set
+        
+        # Update status to completed
+        BACKGROUND_SIMULATIONS[sweep_id]['status'] = 'complete'
+        BACKGROUND_SIMULATIONS[sweep_id]['progress'] = 100
+        BACKGROUND_SIMULATIONS[sweep_id]['message'] = f'Parameter sweep completed with {len(results)} successful simulations'
+        BACKGROUND_SIMULATIONS[sweep_id]['end_time'] = time.time()
+        BACKGROUND_SIMULATIONS[sweep_id]['result_count'] = len(results)
+        
+    except Exception as e:
+        # If an error occurs, store it in the simulation status
+        import traceback
+        error_traceback = traceback.format_exc()
+        print(f"Background parameter sweep error: {str(e)}")
+        print(error_traceback)  # Print full traceback for debugging
+        
+        BACKGROUND_SIMULATIONS[sweep_id]['status'] = 'error'
+        BACKGROUND_SIMULATIONS[sweep_id]['error'] = str(e)
+        BACKGROUND_SIMULATIONS[sweep_id]['message'] = 'Error occurred during parameter sweep'
+        BACKGROUND_SIMULATIONS[sweep_id]['end_time'] = time.time()
 
 import threading
 import uuid
