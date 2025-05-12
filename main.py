@@ -40,6 +40,78 @@ db.init_app(app)
 with app.app_context():
     db.create_all()
 
+# Define a custom error handler for 500 errors
+@app.errorhandler(500)
+def internal_server_error(error):
+    """
+    Custom error handler for 500 errors to ensure API routes still return JSON.
+    """
+    # Check if this is an AJAX/API request
+    is_ajax = (request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 
+              request.content_type == 'application/json' or
+              request.args.get('format') == 'json' or
+              request.path.startswith('/simulation_status/') or
+              request.path == '/run_simulation')
+    
+    if is_ajax:
+        # Return JSON for API routes
+        return jsonify({
+            'status': 'error',
+            'error': 'Internal server error occurred. The server may have timed out.'
+        }), 500, {'Content-Type': 'application/json'}
+    else:
+        # For regular HTML routes, rethrow the original error
+        return render_template('error.html', error=str(error)), 500
+
+# Define a custom error handler for 404 errors
+@app.errorhandler(404)
+def page_not_found(error):
+    """
+    Custom error handler for 404 errors to ensure API routes still return JSON.
+    """
+    # Check if this is an AJAX/API request
+    is_ajax = (request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 
+              request.content_type == 'application/json' or
+              request.args.get('format') == 'json' or
+              request.path.startswith('/simulation_status/'))
+    
+    if is_ajax:
+        # Return JSON for API routes
+        return jsonify({
+            'status': 'error',
+            'error': 'Resource not found'
+        }), 404, {'Content-Type': 'application/json'}
+    else:
+        # For regular HTML routes, use the default behavior
+        return render_template('error.html', error="Page not found"), 404
+        
+# Define a custom error handler for general exceptions
+@app.errorhandler(Exception)
+def handle_exception(error):
+    """
+    Custom error handler to catch unhandled exceptions and ensure API routes return JSON.
+    """
+    # Log the error
+    app.logger.error(f"Unhandled exception: {str(error)}")
+    app.logger.error(traceback.format_exc())
+    
+    # Check if this is an AJAX/API request
+    is_ajax = (request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 
+              request.content_type == 'application/json' or
+              request.args.get('format') == 'json' or
+              request.path.startswith('/simulation_status/') or
+              request.path == '/run_simulation')
+    
+    if is_ajax:
+        # Always return JSON for API routes
+        return jsonify({
+            'status': 'error',
+            'error': str(error) or "An unexpected error occurred"
+        }), 500, {'Content-Type': 'application/json'}
+    else:
+        # For regular HTML routes, render an error template
+        return render_template('error.html', error=str(error)), 500
+
 @app.route('/')
 def index():
     """Render the main page."""
