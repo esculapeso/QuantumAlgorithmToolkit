@@ -1,0 +1,296 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-6">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary-subtle">
+                <h5 class="card-title mb-0">Run Quantum Simulation</h5>
+            </div>
+            <div class="card-body">
+                <form action="/run_simulation" method="post" id="simulation-form">
+                    <div class="mb-3">
+                        <label for="circuit_type" class="form-label">Circuit Type</label>
+                        <select class="form-select" id="circuit_type" name="circuit_type" required>
+                            {% for circuit in circuit_types %}
+                            <option value="{{ circuit.id }}">{{ circuit.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Select the quantum circuit algorithm to simulate.</div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="qubits" class="form-label">Number of Qubits</label>
+                                <input type="number" class="form-control" id="qubits" name="qubits" 
+                                       min="1" max="10" value="3" required>
+                                <div class="form-text">
+                                    More qubits = more complex simulation
+                                    <span class="text-warning">(>5 will run in background)</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="shots" class="form-label">Measurement Shots</label>
+                                <input type="number" class="form-control" id="shots" name="shots" 
+                                       min="1" max="20000" value="8192" required>
+                                <div class="form-text">Number of measurement repetitions</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="drive_steps" class="form-label">Drive Steps</label>
+                                <input type="number" class="form-control" id="drive_steps" name="drive_steps" 
+                                       min="1" max="20" value="5" required>
+                                <div class="form-text">Number of drive sequence repetitions</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="drive_param" class="form-label">Drive Parameter</label>
+                                <input type="number" class="form-control" id="drive_param" name="drive_param" 
+                                       min="0.1" max="2.0" step="0.1" value="0.9" required>
+                                <div class="form-text">Controls drive strength (0.1-2.0)</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="time_points" class="form-label">Time Points</label>
+                                <input type="number" class="form-control" id="time_points" name="time_points" 
+                                       min="10" max="10000" value="100" required>
+                                <div class="form-text">
+                                    Number of simulation time points 
+                                    <span class="text-warning">(>500 will run in background)</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="max_time" class="form-label">Max Time</label>
+                                <input type="number" class="form-control" id="max_time" name="max_time" 
+                                       min="1" max="50" value="10.0" step="0.5" required>
+                                <div class="form-text">Maximum simulation time</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="init_state" class="form-label">Initial State</label>
+                        <select class="form-select" id="init_state" name="init_state">
+                            <option value="superposition">Superposition (Default)</option>
+                            <option value="|00..0>">|00..0> (All Zeros)</option>
+                            <option value="|11..1>">|11..1> (All Ones)</option>
+                        </select>
+                        <div class="form-text">Initial quantum state for the simulation</div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary" id="run-sim-button">Run Simulation</button>
+                </form>
+                
+                <!-- Progress tracking section -->
+                <div id="simulation-progress" class="mt-4 d-none">
+                    <div class="alert alert-info">
+                        <h6 class="alert-heading" id="progress-status">Simulation running...</h6>
+                        <div class="progress mt-2">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 id="progress-bar" role="progressbar" 
+                                 style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                        </div>
+                        <p class="mb-0 mt-2 small" id="progress-detail">Starting simulation...</p>
+                    </div>
+                </div>
+                
+                <!-- Add JavaScript for progress tracking -->
+                <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        const form = document.querySelector('form');
+                        const progressSection = document.getElementById('simulation-progress');
+                        const progressBar = document.getElementById('progress-bar');
+                        const progressStatus = document.getElementById('progress-status');
+                        const progressDetail = document.getElementById('progress-detail');
+                        const runButton = document.getElementById('run-sim-button');
+                        
+                        let simulationId = null;
+                        let checkInterval = null;
+                        
+                        form.addEventListener('submit', function(e) {
+                            // Only handle AJAX for background simulations
+                            const qubits = parseInt(document.getElementById('qubits').value);
+                            const timePoints = parseInt(document.getElementById('time_points').value);
+                            
+                            if (qubits > 5 || timePoints > 500) {
+                                e.preventDefault();
+                                
+                                // Show progress section
+                                progressSection.classList.remove('d-none');
+                                progressBar.style.width = '0%';
+                                progressBar.textContent = '0%';
+                                progressDetail.textContent = 'Initializing simulation...';
+                                runButton.disabled = true;
+                                
+                                // Get form data
+                                const formData = new FormData(form);
+                                
+                                // Send AJAX request
+                                fetch(form.action, {
+                                    method: 'POST',
+                                    body: formData
+                                })
+                                .then(response => {
+                                    if (!response.ok) {
+                                        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                                    }
+                                    return response.json();
+                                })
+                                .then(data => {
+                                    if (data.error) {
+                                        progressStatus.textContent = 'Error';
+                                        progressDetail.textContent = data.error;
+                                        progressSection.classList.remove('alert-info');
+                                        progressSection.classList.add('alert-danger');
+                                        runButton.disabled = false;
+                                        return;
+                                    }
+                                    
+                                    simulationId = data.simulation_id;
+                                    
+                                    // Start checking progress
+                                    checkInterval = setInterval(checkProgress, 1000);
+                                })
+                                .catch(error => {
+                                    console.error('Simulation error:', error);
+                                    progressStatus.textContent = 'Error';
+                                    progressDetail.textContent = 'Failed to start simulation: ' + error.message;
+                                    progressSection.classList.remove('alert-info');
+                                    progressSection.classList.add('alert-danger');
+                                    runButton.disabled = false;
+                                });
+                            }
+                        });
+                        
+                        function checkProgress() {
+                            if (!simulationId) return;
+                            
+                            fetch(`/simulation_status/${simulationId}`)
+                                .then(response => {
+                                    if (!response.ok) {
+                                        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                                    }
+                                    return response.json();
+                                })
+                                .then(data => {
+                                    if (data.error) {
+                                        clearInterval(checkInterval);
+                                        progressStatus.textContent = 'Error';
+                                        progressDetail.textContent = data.error;
+                                        progressSection.classList.remove('alert-info');
+                                        progressSection.classList.add('alert-danger');
+                                        runButton.disabled = false;
+                                        return;
+                                    }
+                                    
+                                    // Update progress information
+                                    if (data.status === 'completed') {
+                                        clearInterval(checkInterval);
+                                        progressBar.style.width = '100%';
+                                        progressBar.textContent = '100%';
+                                        progressStatus.textContent = 'Simulation Complete!';
+                                        progressDetail.textContent = data.message || 'Redirecting to results...';
+                                        
+                                        // Redirect to result page
+                                        if (data.result_path) {
+                                            setTimeout(() => {
+                                                window.location.href = `/result/${data.result_path}`;
+                                            }, 1000);
+                                        } else {
+                                            runButton.disabled = false;
+                                        }
+                                    } else if (data.status === 'running' || data.status === 'starting') {
+                                        const progress = data.progress || 0;
+                                        progressBar.style.width = `${progress}%`;
+                                        progressBar.textContent = `${progress}%`;
+                                        progressDetail.textContent = data.message || `Processing: ${progress}% complete`;
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('Error checking status:', error);
+                                    
+                                    // Only show a UI error if we haven't already
+                                    if (progressSection.classList.contains('alert-info')) {
+                                        clearInterval(checkInterval);
+                                        progressStatus.textContent = 'Error';
+                                        progressDetail.textContent = 'Failed to check simulation status: ' + error.message;
+                                        progressSection.classList.remove('alert-info');
+                                        progressSection.classList.add('alert-danger');
+                                        runButton.disabled = false;
+                                    }
+                                });
+                        }
+                    });
+                </script>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-info-subtle">
+                <h5 class="card-title mb-0">Recent Simulation Results</h5>
+            </div>
+            <div class="card-body">
+                {% if recent_results %}
+                <div class="row">
+                    {% for result in recent_results %}
+                    <div class="col-md-6 mb-3">
+                        <div class="card result-card h-100 border-info-subtle">
+                            <div class="card-body">
+                                <h6 class="card-title text-truncate">{{ result }}</h6>
+                                <p class="card-text small text-muted">
+                                    {{ result.split('_')[0] }} circuit
+                                </p>
+                            </div>
+                            <div class="card-footer bg-transparent border-top-0">
+                                <a href="{{ url_for('view_result', result_name=result) }}" class="btn btn-sm btn-outline-info">View Results</a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="alert alert-secondary">
+                    <p class="mb-0">No simulation results found. Run your first simulation to see results here.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="card shadow-sm">
+            <div class="card-header bg-secondary-subtle">
+                <h5 class="card-title mb-0">About Quantum Simulation</h5>
+            </div>
+            <div class="card-body">
+                <p>This interface allows you to run quantum simulations to study time crystals and frequency combs in quantum systems. The implementation uses Qiskit for quantum circuit simulation.</p>
+                
+                <h6>Available Circuit Types:</h6>
+                <ul>
+                    <li><strong>Penrose-inspired Circuit:</strong> Based on Penrose tiling patterns</li>
+                    <li><strong>QFT Basic Circuit:</strong> Uses Quantum Fourier Transform</li>
+                    <li><strong>Frequency Comb Generator:</strong> Optimized for frequency comb structures</li>
+                    <li><strong>Twistor-inspired Comb Circuit:</strong> Based on twistor space mathematics</li>
+                    <li><strong>Graphene Lattice Circuit:</strong> Inspired by graphene's lattice structure</li>
+                </ul>
+                
+                <p class="small text-muted mt-3">Note: Simulations with more qubits will take longer to run. For optimal performance, we recommend using 3-6 qubits.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
