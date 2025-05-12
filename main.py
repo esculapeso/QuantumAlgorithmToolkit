@@ -90,6 +90,11 @@ def run_sim():
         drive_param = float(request.form.get('drive_param', 0.9))
         init_state = request.form.get('init_state', 'superposition')
         
+        # Determine if this is an AJAX request
+        is_ajax = (request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 
+                  request.content_type == 'application/json' or
+                  request.args.get('format') == 'json')
+        
         # For simulations with more than 500 time points or more than 5 qubits,
         # run in background to avoid timeouts
         if time_points > 500 or qubits > 5:
@@ -118,6 +123,7 @@ def run_sim():
                 'start_time': time.time(),
                 'result_path': None,
                 'error': None,
+                'message': 'Initializing simulation...',
             }
             
             # Start background thread for simulation
@@ -128,8 +134,17 @@ def run_sim():
             thread.daemon = True
             thread.start()
             
-            flash(f'Long simulation started in background. You can check its progress on the simulations page.')
-            return redirect(url_for('view_simulations'))
+            if is_ajax:
+                # Return JSON response for AJAX requests
+                return jsonify({
+                    'status': 'pending',
+                    'simulation_id': sim_id,
+                    'message': 'Simulation started in the background'
+                })
+            else:
+                # Regular form submission - redirect to the simulations page
+                flash(f'Long simulation started in background. You can check its progress on the simulations page.')
+                return redirect(url_for('view_simulations'))
         
         # For smaller simulations, run synchronously as before
         param_set_name = f"web_{circuit_type}_{qubits}q"
@@ -153,16 +168,38 @@ def run_sim():
         results_path = result.get('results_path', '')
         result_name = os.path.basename(results_path) if results_path else None
         
-        # Redirect to the result view
-        if result_name:
-            return redirect(url_for('view_result', result_name=result_name))
+        if is_ajax:
+            # Return JSON response for AJAX requests
+            if result_name:
+                return jsonify({
+                    'status': 'completed',
+                    'result_name': result_name,
+                    'message': 'Simulation completed successfully'
+                })
+            else:
+                return jsonify({
+                    'status': 'error',
+                    'error': 'Simulation completed but result path not found'
+                })
         else:
-            flash('Simulation completed but result path not found.')
-            return redirect(url_for('index'))
+            # Regular form submission - redirect to the result view
+            if result_name:
+                return redirect(url_for('view_result', result_name=result_name))
+            else:
+                flash('Simulation completed but result path not found.')
+                return redirect(url_for('index'))
         
     except Exception as e:
-        flash(f'Error running simulation: {str(e)}')
-        return redirect(url_for('index'))
+        error_message = f'Error running simulation: {str(e)}'
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.content_type == 'application/json':
+            return jsonify({
+                'status': 'error',
+                'error': error_message
+            })
+        else:
+            flash(error_message)
+            return redirect(url_for('index'))
 
 def run_background_simulation(sim_id, params):
     """Run a simulation in the background and update its status."""

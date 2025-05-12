@@ -4,6 +4,9 @@ Contains functions for plotting and data presentation.
 """
 
 import numpy as np
+# Configure matplotlib to use a non-interactive backend (avoid 'main thread' warnings)
+import matplotlib
+matplotlib.use('Agg')  # Must be before importing pyplot
 import matplotlib.pyplot as plt
 import os
 import json
