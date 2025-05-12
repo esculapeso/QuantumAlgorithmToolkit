@@ -12,7 +12,7 @@ import numpy as np
 import config
 from utils import ensure_dependencies
 from quantum_circuits import get_circuit_generator
-from simulation import run_simulation, run_parameter_scan, generate_parameter_grid
+from simulation import run_parameter_scan, generate_parameter_grid
 from visualization import plot_circuit_diagram
 
 # Import Flask web application
@@ -148,6 +148,10 @@ def run_simulation():
         
         # For smaller simulations, run synchronously as before
         param_set_name = f"web_{circuit_type}_{qubits}q"
+        
+        # Import here to avoid circular imports
+        from simulation import run_simulation
+        
         result = run_simulation(
             circuit_type=circuit_type,
             qubits=qubits,
@@ -511,6 +515,9 @@ def main():
                     return
     
     print(f"Running {circuit_type} simulation with {qubits} qubits...")
+    
+    # Import here to avoid circular imports
+    from simulation import run_simulation
     
     # Run a single simulation with the specified parameters
     result = run_simulation(
