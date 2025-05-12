@@ -412,7 +412,6 @@ import threading
 import uuid
 import time
 import json
-import traceback
 
 # Dictionary to store background simulation status
 BACKGROUND_SIMULATIONS = {}
@@ -641,15 +640,28 @@ def view_simulations():
     # Get background jobs (in-progress simulations)
     background_jobs = []
     for sim_id, sim_data in BACKGROUND_SIMULATIONS.items():
-        background_jobs.append({
-            'id': sim_id,
-            'circuit_type': sim_data['params']['circuit_type'],
-            'qubits': sim_data['params']['qubits'],
-            'time_points': sim_data['params']['time_points'],
-            'status': sim_data['status'],
-            'progress': sim_data['progress'],
-            'is_background_job': True
-        })
+        try:
+            params = sim_data.get('params', {})
+            job_info = {
+                'id': sim_id,
+                'circuit_type': params.get('circuit_type', 'unknown'),
+                'status': sim_data.get('status', 'unknown'),
+                'progress': sim_data.get('progress', 0),
+                'is_background_job': True
+            }
+            
+            # Parameter sweep might store info differently
+            if 'parameter_sets' in params:
+                job_info['qubits'] = 'multiple'
+                job_info['time_points'] = 'multiple'
+                job_info['circuit_type'] = f"{params.get('circuit_type', 'unknown')} (sweep)"
+            else:
+                job_info['qubits'] = params.get('qubits', 'unknown')
+                job_info['time_points'] = params.get('time_points', 'unknown')
+                
+            background_jobs.append(job_info)
+        except Exception as e:
+            print(f"Error processing background job {sim_id}: {str(e)}")
     
     # Get database results
     try:
