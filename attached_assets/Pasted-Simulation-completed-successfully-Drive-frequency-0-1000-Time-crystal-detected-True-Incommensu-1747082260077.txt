@@ -1,0 +1,135 @@
+Simulation completed successfully!
+Drive frequency: 0.1000
+Time crystal detected: True
+Incommensurate frequencies detected: 0
+Error saving to database: Working outside of application context.
+
+This typically means that you attempted to use functionality that needed
+the current application. To solve this, set up an application context
+with app.app_context(). See the documentation for more information.
+Traceback (most recent call last):
+  File "/home/runner/workspace/main.py", line 419, in run_background_parameter_sweep
+    db_result = save_simulation_to_db(result, result_path)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/db_utils.py", line 65, in save_simulation_to_db
+    db.session.add(sim_result)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/orm/scoping.py", line 380, in add
+    return self._proxied.add(instance, _warn=_warn)
+           ^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/orm/scoping.py", line 197, in _proxied
+    return self.registry()
+           ^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/util/_collections.py", line 634, in __call__
+    key = self.scopefunc()
+          ^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask_sqlalchemy/session.py", line 111, in _app_ctx_id
+    return id(app_ctx._get_current_object())  # type: ignore[attr-defined]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/werkzeug/local.py", line 519, in _get_current_object
+    raise RuntimeError(unbound_message) from None
+RuntimeError: Working outside of application context.
+
+This typically means that you attempted to use functionality that needed
+the current application. To solve this, set up an application context
+with app.app_context(). See the documentation for more information.
+Google Colab drive module not available. Saving to Google Drive disabled.
+Generated penrose circuit with 3 qubits
+Circuit depth: 21
+Starting simulation across 100 time points...
+  Completed 10/100 time points (10.0%)
+  Completed 20/100 time points (20.0%)
+  Completed 30/100 time points (30.0%)
+  Completed 40/100 time points (40.0%)
+  Completed 50/100 time points (50.0%)
+  Completed 60/100 time points (60.0%)
+  Completed 70/100 time points (70.0%)
+  Completed 80/100 time points (80.0%)
+  Completed 90/100 time points (90.0%)
+  Completed 100/100 time points (100.0%)
+Simulation completed in 11.68 seconds
+Results saved to results/penrose_parameter_scan_20250512_2_3q_100tp_d0.9_20250512-203559
+Simulation completed successfully!
+Drive frequency: 0.1000
+Time crystal detected: False
+Incommensurate frequencies detected: 0
+Error saving to database: Working outside of application context.
+
+This typically means that you attempted to use functionality that needed
+the current application. To solve this, set up an application context
+with app.app_context(). See the documentation for more information.
+Traceback (most recent call last):
+  File "/home/runner/workspace/main.py", line 419, in run_background_parameter_sweep
+    db_result = save_simulation_to_db(result, result_path)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/db_utils.py", line 65, in save_simulation_to_db
+    db.session.add(sim_result)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/orm/scoping.py", line 380, in add
+    return self._proxied.add(instance, _warn=_warn)
+           ^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/orm/scoping.py", line 197, in _proxied
+    return self.registry()
+           ^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/util/_collections.py", line 634, in __call__
+    key = self.scopefunc()
+          ^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask_sqlalchemy/session.py", line 111, in _app_ctx_id
+    return id(app_ctx._get_current_object())  # type: ignore[attr-defined]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/werkzeug/local.py", line 519, in _get_current_object
+    raise RuntimeError(unbound_message) from None
+RuntimeError: Working outside of application context.
+
+This typically means that you attempted to use functionality that needed
+the current application. To solve this, set up an application context
+with app.app_context(). See the documentation for more information.
+Google Colab drive module not available. Saving to Google Drive disabled.
+Generated penrose circuit with 6 qubits
+Circuit depth: 36
+Starting simulation across 100 time points...
+  Completed 10/100 time points (10.0%)
+  Completed 20/100 time points (20.0%)
+  Completed 30/100 time points (30.0%)
+  Completed 40/100 time points (40.0%)
+  Completed 50/100 time points (50.0%)
+  Completed 60/100 time points (60.0%)
+  Completed 70/100 time points (70.0%)
+  Completed 80/100 time points (80.0%)
+  Completed 90/100 time points (90.0%)
+  Completed 100/100 time points (100.0%)
+Simulation completed in 12.87 seconds
+Results saved to results/penrose_parameter_scan_20250512_3_6q_100tp_d0.9_20250512-203611
+Simulation completed successfully!
+Drive frequency: 0.1000
+Time crystal detected: True
+Incommensurate frequencies detected: 0
+Error saving to database: Working outside of application context.
+
+This typically means that you attempted to use functionality that needed
+the current application. To solve this, set up an application context
+with app.app_context(). See the documentation for more information.
+Traceback (most recent call last):
+  File "/home/runner/workspace/main.py", line 419, in run_background_parameter_sweep
+    db_result = save_simulation_to_db(result, result_path)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/db_utils.py", line 65, in save_simulation_to_db
+    db.session.add(sim_result)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/orm/scoping.py", line 380, in add
+    return self._proxied.add(instance, _warn=_warn)
+           ^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/orm/scoping.py", line 197, in _proxied
+    return self.registry()
+           ^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/util/_collections.py", line 634, in __call__
+    key = self.scopefunc()
+          ^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask_sqlalchemy/session.py", line 111, in _app_ctx_id
+    return id(app_ctx._get_current_object())  # type: ignore[attr-defined]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/werkzeug/local.py", line 519, in _get_current_object
+    raise RuntimeError(unbound_message) from None
+RuntimeError: Working outside of application context.
+
+This typically means that you attempted to use functionality that needed
+the current application. To solve this, set up an application context
+with app.app_context(). See the documentation for more information.
+Parameter sweep completed with 3 simulations. All results have been saved to the database and will appear in the 'Completed Simulations' list.
