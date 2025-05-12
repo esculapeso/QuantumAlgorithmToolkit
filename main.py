@@ -281,12 +281,81 @@ def simulation_status(sim_id):
 def view_result(result_name):
     """View a specific simulation result."""
     try:
-        # Base path for this result
+        # First try to get simulation from database
+        try:
+            from db_utils import get_simulation_by_name
+            db_result = get_simulation_by_name(result_name)
+            
+            if db_result:
+                # Result exists in database, use database data
+                result_path = db_result.results_path
+                
+                # Get list of figure files
+                figure_files = glob.glob(os.path.join(result_path, 'figures', '*.png'))
+                figures = [os.path.basename(f) for f in figure_files]
+                
+                # Build a result data structure from database
+                result_data = {
+                    'parameters': {
+                        'circuit_type': db_result.circuit_type,
+                        'qubits': db_result.qubits,
+                        'shots': db_result.shots,
+                        'drive_steps': db_result.drive_steps,
+                        'time_points': db_result.time_points,
+                        'max_time': db_result.max_time,
+                        'drive_param': db_result.drive_param,
+                        'init_state': db_result.init_state
+                    },
+                    'time_crystal_detected': db_result.time_crystal_detected,
+                    'incommensurate_count': db_result.incommensurate_count,
+                    'drive_frequency': db_result.drive_frequency,
+                    'linear_combs_detected': db_result.linear_combs_detected,
+                    'log_combs_detected': db_result.log_combs_detected
+                }
+                
+                # Get extra data if available
+                try:
+                    extra_data = db_result.get_extra_data()
+                    result_data.update(extra_data)
+                except:
+                    pass
+                
+                # Render the template with database data
+                return render_template('result.html',
+                                     result_name=result_name,
+                                     figures=figures,
+                                     result_data=result_data,
+                                     time_crystal_detected=db_result.time_crystal_detected,
+                                     incommensurate_count=db_result.incommensurate_count,
+                                     from_database=True)
+        except Exception as db_error:
+            print(f"Could not retrieve from database: {db_error}")
+            # Continue to file-based method if database retrieval fails
+        
+        # Base path for this result if not from database
         result_path = os.path.join('results', result_name)
         
-        # Load the saved result data
-        with open(os.path.join(result_path, 'result_data.json'), 'r') as f:
-            result_data = json.load(f)
+        # Create result_data.json if it doesn't exist (for backward compatibility)
+        result_data_path = os.path.join(result_path, 'result_data.json')
+        if not os.path.exists(result_data_path):
+            # Try to build from analysis results
+            analysis_path = os.path.join(result_path, 'data', 'analysis_results.json')
+            if os.path.exists(analysis_path):
+                with open(analysis_path, 'r') as f:
+                    analysis = json.load(f)
+                result_data = {
+                    'parameters': analysis.get('parameters', {}),
+                    'time_crystal_detected': analysis.get('basic_analysis', {}).get('has_subharmonics', False),
+                    'incommensurate_count': analysis.get('frequency_crystal_analysis', {}).get('incommensurate_peak_count', 0),
+                    'drive_frequency': analysis.get('basic_analysis', {}).get('drive_frequency', 0.0)
+                }
+            else:
+                # Default empty data
+                result_data = {'parameters': {}, 'time_crystal_detected': False, 'incommensurate_count': 0}
+        else:
+            # Load the saved result data 
+            with open(result_data_path, 'r') as f:
+                result_data = json.load(f)
         
         # Get list of figure files
         figure_files = glob.glob(os.path.join(result_path, 'figures', '*.png'))
@@ -301,7 +370,8 @@ def view_result(result_name):
                              figures=figures,
                              result_data=result_data,
                              time_crystal_detected=time_crystal_detected,
-                             incommensurate_count=incommensurate_count)
+                             incommensurate_count=incommensurate_count,
+                             from_database=False)
     
     except Exception as e:
         flash(f'Error viewing result: {str(e)}')
@@ -310,6 +380,26 @@ def view_result(result_name):
 @app.route('/figure/<result_name>/<figure_name>')
 def get_figure(result_name, figure_name):
     """Get a figure file for a result."""
+    # First check if result is in database
+    try:
+        from db_utils import get_simulation_by_name
+        db_result = get_simulation_by_name(result_name)
+        
+        if db_result and db_result.results_path:
+            # Create a path relative to the static folder
+            figure_path = os.path.join(db_result.results_path, 'figures', figure_name)
+            if os.path.exists(figure_path):
+                # Convert absolute path to relative for url_for
+                rel_path = os.path.relpath(figure_path, 'static')
+                if rel_path.startswith('..'):
+                    # It's outside the static folder, so use relative to root
+                    return redirect(f'/static/../{os.path.relpath(figure_path)}')
+                else:
+                    return redirect(url_for('static', filename=rel_path))
+    except Exception as e:
+        print(f"Error retrieving figure from database: {e}")
+    
+    # Fall back to default location if not found in database
     return redirect(url_for('static', filename=f'../results/{result_name}/figures/{figure_name}'))
 
 def main():
