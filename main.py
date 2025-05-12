@@ -152,6 +152,10 @@ def run_simulation():
         # Import here to avoid circular imports
         from simulation import run_simulation
         
+        # Generate a unique random seed for this run
+        import random
+        unique_seed = random.randint(10000, 99999)
+        
         result = run_simulation(
             circuit_type=circuit_type,
             qubits=qubits,
@@ -165,7 +169,8 @@ def run_simulation():
             save_results=True,
             show_plots=False,
             plot_circuit=True,
-            verbose=True
+            verbose=True,
+            seed=unique_seed
         )
         
         # Get the result directory name
@@ -225,6 +230,10 @@ def run_background_simulation(sim_id, params):
         # Import run_simulation here to avoid circular imports
         from simulation import run_simulation
         
+        # Generate a unique random seed for this run
+        import random
+        unique_seed = random.randint(10000, 99999)
+        
         # Run the simulation with the progress callback
         result = run_simulation(
             circuit_type=params['circuit_type'],
@@ -240,7 +249,8 @@ def run_background_simulation(sim_id, params):
             show_plots=False,
             plot_circuit=True,
             verbose=True,
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
+            seed=unique_seed
         )
         
         # Update simulation status with the result path
@@ -519,6 +529,10 @@ def main():
     # Import here to avoid circular imports
     from simulation import run_simulation
     
+    # Generate a unique random seed for this run
+    import random
+    unique_seed = random.randint(10000, 99999)
+    
     # Run a single simulation with the specified parameters
     result = run_simulation(
         circuit_type=circuit_type,
@@ -533,7 +547,8 @@ def main():
         save_results=True,
         show_plots=True,
         plot_circuit=True,
-        verbose=True
+        verbose=True,
+        seed=unique_seed
     )
     
     # Print key results

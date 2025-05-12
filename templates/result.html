@@ -48,6 +48,12 @@
                             <th>Max Time:</th>
                             <td>{{ result_data.parameters.max_time }}</td>
                         </tr>
+                        <tr>
+                            <th>Random Seed:</th>
+                            <td>{{ result_data.random_seed if result_data.random_seed is defined else 'Unknown' }}</td>
+                            <th>Timestamp:</th>
+                            <td>{{ result_data.timestamp if result_data.timestamp is defined else 'Unknown' }}</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
