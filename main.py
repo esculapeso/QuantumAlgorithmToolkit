@@ -46,13 +46,14 @@ def index():
     # Get a list of recent simulation results from the database
     try:
         from db_utils import get_recent_simulations
-        recent_results = get_recent_simulations(limit=10)
+        # For backward compatibility with the template expecting strings
+        db_results = get_recent_simulations(limit=10)
+        recent_results = [r.result_name for r in db_results]
     except Exception as e:
         # Fall back to file system if database fails
         recent_results = []
         print(f"Warning: Could not fetch from database: {e}")
-        # Just use empty list - we don't want to use the file system directly
-        # since it doesn't have the proper object structure the template expects
+        # If needed, we could scan the results directory here
     
     # Available circuit types
     circuit_types = [
@@ -63,7 +64,7 @@ def index():
         {"id": "graphene_fc", "name": "Graphene Lattice Circuit"}
     ]
     
-    return render_template('index_updated.html', 
+    return render_template('index.html', 
                           recent_results=recent_results,
                           circuit_types=circuit_types,
                           default_params=config.DEFAULT_SIMULATION_PARAMS)
@@ -72,6 +73,7 @@ import threading
 import uuid
 import time
 import json
+import traceback
 
 # Dictionary to store background simulation status
 BACKGROUND_SIMULATIONS = {}
@@ -201,12 +203,15 @@ def run_simulation():
     except Exception as e:
         error_message = f'Error running simulation: {str(e)}'
         print(f"Simulation error: {error_message}")
+        # Print traceback for debugging
+        print(traceback.format_exc())
         
         # Always return JSON for this endpoint - frontend expects it
+        # Make sure there's no HTML in the response
         return jsonify({
             'status': 'error',
             'error': error_message
-        })
+        }), 500, {'Content-Type': 'application/json'}
 
 def run_background_simulation(sim_id, params):
     """Run a simulation in the background and update its status."""
@@ -332,15 +337,20 @@ def simulation_status(sim_id):
     """Get the status of a specific simulation."""
     try:
         if sim_id in BACKGROUND_SIMULATIONS:
-            return jsonify(BACKGROUND_SIMULATIONS[sim_id])
+            return jsonify(BACKGROUND_SIMULATIONS[sim_id]), 200, {'Content-Type': 'application/json'}
         else:
-            return jsonify({'error': 'Simulation not found', 'status': 'error'}), 404
+            return jsonify({'error': 'Simulation not found', 'status': 'error'}), 404, {'Content-Type': 'application/json'}
     except Exception as e:
+        # Print traceback for debugging
+        error_traceback = traceback.format_exc()
+        print(f"Status check error: {str(e)}")
+        print(error_traceback)
+        
         # Ensure we always return valid JSON even on unexpected errors
         return jsonify({
             'error': f'Error checking simulation status: {str(e)}',
             'status': 'error'
-        })
+        }), 500, {'Content-Type': 'application/json'}
 
 @app.route('/result/<result_name>')
 def view_result(result_name):
