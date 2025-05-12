@@ -95,9 +95,9 @@ def run_simulation():
                   request.content_type == 'application/json' or
                   request.args.get('format') == 'json')
         
-        # For simulations with more than 500 time points or more than 5 qubits,
+        # For simulations with more than 300 time points or more than 5 qubits,
         # run in background to avoid timeouts
-        if time_points > 500 or qubits > 5:
+        if time_points > 300 or qubits > 5:
             # Generate a unique ID for this simulation
             sim_id = str(uuid.uuid4())
             
@@ -202,19 +202,11 @@ def run_simulation():
         error_message = f'Error running simulation: {str(e)}'
         print(f"Simulation error: {error_message}")
         
-        # Determine if this is an AJAX request
-        is_ajax = (request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 
-                  request.content_type == 'application/json' or
-                  request.args.get('format') == 'json')
-        
-        if is_ajax:
-            return jsonify({
-                'status': 'error',
-                'error': error_message
-            })
-        else:
-            flash(error_message)
-            return redirect(url_for('index'))
+        # Always return JSON for this endpoint - frontend expects it
+        return jsonify({
+            'status': 'error',
+            'error': error_message
+        })
 
 def run_background_simulation(sim_id, params):
     """Run a simulation in the background and update its status."""
@@ -263,8 +255,14 @@ def run_background_simulation(sim_id, params):
         
     except Exception as e:
         # If an error occurs, store it in the simulation status
+        import traceback
+        error_traceback = traceback.format_exc()
+        print(f"Background simulation error: {str(e)}")
+        print(error_traceback)  # Print full traceback for debugging
+        
         BACKGROUND_SIMULATIONS[sim_id]['status'] = 'error'
         BACKGROUND_SIMULATIONS[sim_id]['error'] = str(e)
+        BACKGROUND_SIMULATIONS[sim_id]['message'] = 'Error occurred during simulation'
         BACKGROUND_SIMULATIONS[sim_id]['end_time'] = time.time()
 
 @app.route('/simulations')
@@ -332,10 +330,17 @@ def view_simulations():
 @app.route('/simulation_status/<sim_id>')
 def simulation_status(sim_id):
     """Get the status of a specific simulation."""
-    if sim_id in BACKGROUND_SIMULATIONS:
-        return jsonify(BACKGROUND_SIMULATIONS[sim_id])
-    else:
-        return jsonify({'error': 'Simulation not found'}), 404
+    try:
+        if sim_id in BACKGROUND_SIMULATIONS:
+            return jsonify(BACKGROUND_SIMULATIONS[sim_id])
+        else:
+            return jsonify({'error': 'Simulation not found', 'status': 'error'}), 404
+    except Exception as e:
+        # Ensure we always return valid JSON even on unexpected errors
+        return jsonify({
+            'error': f'Error checking simulation status: {str(e)}',
+            'status': 'error'
+        })
 
 @app.route('/result/<result_name>')
 def view_result(result_name):
