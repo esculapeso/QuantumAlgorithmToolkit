@@ -1193,6 +1193,11 @@ def view_result(result_name):
 @app.route('/figure/<result_name>/<figure_name>')
 def get_figure(result_name, figure_name):
     """Get a figure file for a result."""
+    print(f"Request for figure: {result_name}/{figure_name}")
+    
+    # List of paths to try, in order of preference
+    paths_to_try = []
+    
     # First check if result is in database
     try:
         from db_utils import get_simulation_by_name
@@ -1200,32 +1205,52 @@ def get_figure(result_name, figure_name):
         
         if db_result and db_result.results_path:
             result_path = db_result.results_path
+            print(f"Simulation found in database with path: {result_path}")
             
-            # Check in figures subfolder first
-            figure_path = os.path.join(result_path, 'figures', figure_name)
-            if os.path.exists(figure_path):
-                return send_file(figure_path)
-            
-            # Check directly in results path as fallback
-            figure_path = os.path.join(result_path, figure_name)
-            if os.path.exists(figure_path):
-                return send_file(figure_path)
+            # Add database paths to try
+            paths_to_try.append(os.path.join(result_path, 'figures', figure_name))
+            paths_to_try.append(os.path.join(result_path, figure_name))
+        else:
+            print(f"Simulation not found in database: {result_name}")
     except Exception as e:
         print(f"Error retrieving figure from database: {e}")
     
-    # Fall back to default locations if not found in database
+    # Add default filesystem paths
+    paths_to_try.append(os.path.join('results', result_name, 'figures', figure_name))
+    paths_to_try.append(os.path.join('results', result_name, figure_name))
     
-    # Try finding in the figures subfolder
-    figure_path = os.path.join('results', result_name, 'figures', figure_name)
-    if os.path.exists(figure_path):
-        return send_file(figure_path)
+    # Try each path in order
+    for path in paths_to_try:
+        print(f"Trying path: {path}")
+        if os.path.exists(path):
+            print(f"Found figure at: {path}")
+            try:
+                # Get MIME type based on extension
+                mime_type = None
+                if path.lower().endswith('.png'):
+                    mime_type = 'image/png'
+                elif path.lower().endswith('.jpg') or path.lower().endswith('.jpeg'):
+                    mime_type = 'image/jpeg'
+                elif path.lower().endswith('.svg'):
+                    mime_type = 'image/svg+xml'
+                
+                response = send_file(
+                    path,
+                    mimetype=mime_type,
+                    as_attachment=False,
+                    download_name=figure_name,
+                    max_age=0  # Don't cache
+                )
+                # Add headers to prevent caching issues
+                response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+                response.headers['Pragma'] = 'no-cache'
+                response.headers['Expires'] = '0'
+                return response
+            except Exception as e:
+                print(f"Error sending file {path}: {e}")
     
-    # Try finding directly in the results folder
-    figure_path = os.path.join('results', result_name, figure_name)
-    if os.path.exists(figure_path):
-        return send_file(figure_path)
-    
-    # If all fails, return a 404
+    # If we get here, the figure wasn't found
+    print(f"Figure not found: {result_name}/{figure_name}")
     return f"Figure {figure_name} not found", 404
 
 def main():

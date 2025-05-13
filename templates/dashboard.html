@@ -396,17 +396,56 @@
                                 // Use a full URL path to avoid any routing issues
                                 const imgHtml = `
                                     <div class="figure-container text-center">
-                                        <img src="/figure/${data.result_name}/${figure}" 
-                                            alt="${figure}" class="img-fluid rounded shadow-sm"
-                                            style="max-height: 400px; border: 1px solid var(--bs-border-color);"
-                                            onerror="this.onerror=null; this.style.display='none'; console.error('Failed to load image: ' + this.src); this.nextElementSibling.nextElementSibling.classList.remove('d-none');">
-                                        <p class="text-muted small mt-2">${figure.replace('.png', '').replace(/_/g, ' ')}</p>
-                                        <div class="error-message d-none text-danger p-3 border border-danger rounded">
-                                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                                            Error loading image: ${figure}
+                                        <div class="mb-2">
+                                            <a href="/figure/${data.result_name}/${figure}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                                                <i class="bi bi-box-arrow-up-right me-1"></i>View in New Tab
+                                            </a>
                                         </div>
+                                        <div class="figure-frame border rounded p-2 mb-2" style="position: relative;">
+                                            <img src="/figure/${data.result_name}/${figure}" 
+                                                alt="${figure}" class="img-fluid"
+                                                style="max-height: 350px;"
+                                                onload="this.parentNode.classList.add('border-success')"
+                                                onerror="this.onerror=null; this.style.display='none'; console.error('Failed to load image: ' + this.src); this.nextElementSibling.style.display='block';">
+                                            <div class="error-message text-danger p-3 border border-danger rounded" style="display: none;">
+                                                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                                Error loading image: ${figure}
+                                                <div class="mt-2">
+                                                    <button class="btn btn-sm btn-outline-primary retry-button" 
+                                                            onclick="reloadImage(this, '/figure/${data.result_name}/${figure}')">
+                                                        <i class="bi bi-arrow-clockwise me-1"></i>Retry
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <p class="text-muted small mt-1">${figure.replace('.png', '').replace(/_/g, ' ')}</p>
                                     </div>
                                 `;
+                                
+                                // Add a function to reload images
+                                if (!window.reloadImage) {
+                                    window.reloadImage = function(button, src) {
+                                        const container = button.closest('.figure-frame');
+                                        const errorDiv = container.querySelector('.error-message');
+                                        const img = document.createElement('img');
+                                        
+                                        img.src = src + '?t=' + new Date().getTime();
+                                        img.alt = src.split('/').pop();
+                                        img.className = 'img-fluid';
+                                        img.style.maxHeight = '350px';
+                                        
+                                        img.onload = function() {
+                                            container.classList.add('border-success');
+                                            errorDiv.style.display = 'none';
+                                            container.prepend(img);
+                                        };
+                                        
+                                        img.onerror = function() {
+                                            console.error('Failed to reload image: ' + src);
+                                            errorDiv.style.display = 'block';
+                                        };
+                                    };
+                                }
                                 figureElement.innerHTML = imgHtml;
                                 
                                 // Add a console message to debug
