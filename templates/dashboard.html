@@ -338,6 +338,19 @@
             });
         }
         
+        // Add event handler for figure visibility toggles
+        document.addEventListener('click', function(event) {
+            if (event.target && event.target.classList.contains('figure-toggle')) {
+                const figureType = event.target.dataset.figureType;
+                const isChecked = event.target.checked;
+                
+                // Show/hide all figure containers with this type
+                document.querySelectorAll(`.figure-container[data-figure-type="${figureType}"]`).forEach(figure => {
+                    figure.style.display = isChecked ? 'block' : 'none';
+                });
+            }
+        });
+        
         try {
             // Auto-show the first simulation if available
             const simulationItems = document.querySelectorAll('.simulation-item');
@@ -449,6 +462,78 @@
                             `${data.qubits} qubits, ${data.time_points} time points | ${data.created_at}`;
                             
                         // Add a comprehensive details section before the figures
+                        // Generate the table of simulation parameters dynamically from all available data
+                        let parametersTable = '';
+                        
+                        // Basic parameters (always shown)
+                        const basicParams = [
+                            { name: 'Circuit Type', value: data.circuit_type },
+                            { name: 'Qubits', value: data.qubits },
+                            { name: 'Time Points', value: data.time_points },
+                            { name: 'Created', value: data.created_at },
+                            { name: 'Result Name', value: `<small>${data.result_name}</small>` }
+                        ];
+                        
+                        // Additional parameters (shown if available)
+                        const additionalParams = [];
+                        
+                        // Check for database-specific parameters
+                        if (data.shots) additionalParams.push({ name: 'Shots', value: data.shots });
+                        if (data.drive_steps) additionalParams.push({ name: 'Drive Steps', value: data.drive_steps });
+                        if (data.max_time) additionalParams.push({ name: 'Max Time', value: data.max_time });
+                        if (data.drive_param) additionalParams.push({ name: 'Drive Parameter', value: data.drive_param });
+                        if (data.drive_frequency) additionalParams.push({ name: 'Drive Frequency', value: data.drive_frequency });
+                        if (data.init_state) additionalParams.push({ name: 'Initial State', value: data.init_state });
+                        if (data.elapsed_time) additionalParams.push({ name: 'Simulation Time', value: `${data.elapsed_time.toFixed(2)}s` });
+                        
+                        // Extra parameters from JSON
+                        if (data.extra_params) {
+                            for (const [key, value] of Object.entries(data.extra_params)) {
+                                // Format the key and value for display
+                                const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                                let formattedValue = value;
+                                
+                                // Format values based on type
+                                if (typeof value === 'number') {
+                                    if (Number.isInteger(value)) {
+                                        formattedValue = value.toString();
+                                    } else {
+                                        formattedValue = value.toFixed(4);
+                                    }
+                                }
+                                
+                                additionalParams.push({ name: formattedKey, value: formattedValue });
+                            }
+                        }
+                        
+                        // Create table rows for basic parameters
+                        basicParams.forEach(param => {
+                            parametersTable += `
+                                <tr>
+                                    <th>${param.name}</th>
+                                    <td>${param.value}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        // Create table rows for additional parameters if available
+                        if (additionalParams.length > 0) {
+                            parametersTable += `
+                                <tr class="table-light">
+                                    <td colspan="2" class="text-center fw-bold">Additional Parameters</td>
+                                </tr>
+                            `;
+                            
+                            additionalParams.forEach(param => {
+                                parametersTable += `
+                                    <tr>
+                                        <th>${param.name}</th>
+                                        <td>${param.value}</td>
+                                    </tr>
+                                `;
+                            });
+                        }
+                        
                         const detailsHtml = `
                             <div class="row mb-4">
                                 <div class="col-md-6">
@@ -459,26 +544,7 @@
                                         <div class="card-body">
                                             <table class="table table-sm">
                                                 <tbody>
-                                                    <tr>
-                                                        <th>Circuit Type</th>
-                                                        <td>${data.circuit_type}</td>
-                                                    </tr>
-                                                    <tr>
-                                                        <th>Qubits</th>
-                                                        <td>${data.qubits}</td>
-                                                    </tr>
-                                                    <tr>
-                                                        <th>Time Points</th>
-                                                        <td>${data.time_points}</td>
-                                                    </tr>
-                                                    <tr>
-                                                        <th>Created</th>
-                                                        <td>${data.created_at}</td>
-                                                    </tr>
-                                                    <tr>
-                                                        <th>Result Name</th>
-                                                        <td><small>${data.result_name}</small></td>
-                                                    </tr>
+                                                    ${parametersTable}
                                                 </tbody>
                                             </table>
                                         </div>
@@ -496,12 +562,19 @@
                                                     ${data.time_crystal_detected ? 
                                                         '<div class="alert alert-success py-2 px-3 mb-0"><i class="bi bi-check-circle-fill me-2"></i> Time crystal pattern detected</div>' : 
                                                         '<div class="alert alert-secondary py-2 px-3 mb-0"><i class="bi bi-x-circle me-2"></i> No time crystal pattern detected</div>'}
+                                                    ${data.incommensurate_count > 0 ? 
+                                                        `<div class="small text-muted mt-1">Incommensurate frequencies: ${data.incommensurate_count}</div>` : ''}
                                                 </div>
                                                 <div>
                                                     <h6>Frequency Comb Detection</h6>
                                                     ${data.comb_detected ? 
                                                         '<div class="alert alert-success py-2 px-3 mb-0"><i class="bi bi-check-circle-fill me-2"></i> Frequency comb structure detected</div>' : 
                                                         '<div class="alert alert-secondary py-2 px-3 mb-0"><i class="bi bi-x-circle me-2"></i> No frequency comb structure detected</div>'}
+                                                    <div class="small text-muted mt-1">
+                                                        ${data.linear_combs_detected ? 'Linear combs detected' : ''}
+                                                        ${data.linear_combs_detected && data.log_combs_detected ? ' | ' : ''}
+                                                        ${data.log_combs_detected ? 'Logarithmic combs detected' : ''}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -520,14 +593,69 @@
                         if (data.figures && data.figures.length > 0) {
                             console.log(`Loading ${data.figures.length} figures`);
                             
-                            // Show all available figures
+                            // Add figure visibility controls
+                            const figureControlsDiv = document.createElement('div');
+                            figureControlsDiv.className = 'mb-3 card';
+                            figureControlsDiv.innerHTML = `
+                                <div class="card-header bg-light">
+                                    <h6 class="mb-0">Figure Visibility</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-flex flex-wrap gap-3">
+                                        <div class="form-check">
+                                            <input class="form-check-input figure-toggle" type="checkbox" id="toggle-circuit" 
+                                                   data-figure-type="circuit_diagram" ${!data.figures.some(f => f.includes('circuit_diagram')) ? 'disabled' : ''}>
+                                            <label class="form-check-label" for="toggle-circuit">
+                                                Circuit Diagram
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input figure-toggle" type="checkbox" id="toggle-expectation"
+                                                   data-figure-type="expectation_values" ${!data.figures.some(f => f.includes('expectation_values')) ? 'disabled' : ''}>
+                                            <label class="form-check-label" for="toggle-expectation">
+                                                Expectation Values
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input figure-toggle" type="checkbox" id="toggle-fft" checked
+                                                   data-figure-type="fft_analysis" ${!data.figures.some(f => f.includes('fft_analysis')) ? 'disabled' : ''}>
+                                            <label class="form-check-label" for="toggle-fft">
+                                                FFT Analysis (Spectrum)
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input figure-toggle" type="checkbox" id="toggle-comb"
+                                                   data-figure-type="comb_analysis" ${!data.figures.some(f => f.includes('comb_analysis')) ? 'disabled' : ''}>
+                                            <label class="form-check-label" for="toggle-comb">
+                                                Comb Analysis
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                            figuresSection.appendChild(figureControlsDiv);
+                            
+                            // Show figures with visibility control
                             data.figures.forEach(figure => {
                                 const figureElement = document.createElement('div');
-                                figureElement.className = 'text-center mb-4';
-                                // Create the image with error handling
-                                // Use a full URL path to avoid any routing issues
-                                // Check if this is a circuit diagram
+                                figureElement.className = 'text-center mb-4 figure-container';
+                                
+                                // Initially hide circuit diagrams and expectation values
                                 const isCircuitDiagram = figure.includes('circuit_diagram');
+                                const isExpectation = figure.includes('expectation_values');
+                                const isCombAnalysis = figure.includes('comb_analysis');
+                                // Only FFT (spectrum) is visible by default
+                                const isFFTAnalysis = figure.includes('fft_analysis');
+                                
+                                if (!isFFTAnalysis) {
+                                    figureElement.style.display = 'none';
+                                }
+                                
+                                // Set data attribute for filtering
+                                if (isCircuitDiagram) figureElement.dataset.figureType = 'circuit_diagram';
+                                else if (isExpectation) figureElement.dataset.figureType = 'expectation_values';
+                                else if (isFFTAnalysis) figureElement.dataset.figureType = 'fft_analysis';
+                                else if (isCombAnalysis) figureElement.dataset.figureType = 'comb_analysis';
                                 
                                 const imgHtml = `
                                     <div class="figure-container text-center">

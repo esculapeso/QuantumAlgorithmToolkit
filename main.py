@@ -715,7 +715,7 @@ def get_simulation_preview(result_name):
         
         print(f"Preview for {result_name}: Found {len(preview_figures)} figures")
             
-        # Return simulation data with all figures
+        # Return simulation data with all figures and parameters
         response_data = {
             "id": sim_id,
             "result_name": result_name,
@@ -728,6 +728,24 @@ def get_simulation_preview(result_name):
             "is_starred": is_starred,
             "figures": preview_figures
         }
+        
+        # Add all extra parameters if available from database
+        if simulation:
+            # Add all database fields to the response
+            for column in simulation.__table__.columns:
+                col_name = column.name
+                if col_name not in response_data and hasattr(simulation, col_name):
+                    value = getattr(simulation, col_name)
+                    # Convert datetime objects to strings
+                    if isinstance(value, datetime.datetime):
+                        value = value.strftime('%Y-%m-%d %H:%M:%S')
+                    response_data[col_name] = value
+            
+            # Load extra data JSON if available
+            if hasattr(simulation, 'get_extra_data') and callable(simulation.get_extra_data):
+                extra_data = simulation.get_extra_data()
+                if extra_data and isinstance(extra_data, dict):
+                    response_data["extra_params"] = extra_data
         
         print(f"Returning data for simulation: {result_name}")
         return jsonify(response_data)
