@@ -641,6 +641,10 @@ def get_simulation_preview(result_name):
             # Extract circuit type (first part)
             circuit_type = parts[0]
             
+            # Special case: If circuit_type is "graphene", convert to "graphene_fc"
+            if circuit_type == "graphene":
+                circuit_type = "graphene_fc"
+            
             # Try to find qubits (look for pattern with q)
             qubits = 3  # Default if we can't extract it
             for part in parts:
@@ -1289,6 +1293,10 @@ def get_circuit_at_t1(circuit_type, qubits):
     print(f"DEBUG: Generating circuit at t=1 for {circuit_type} with {qubits} qubits")
     
     try:
+        # Handle the case where the circuit type name is just "graphene"
+        if circuit_type == "graphene":
+            circuit_type = "graphene_fc"
+            
         # Get the appropriate circuit generator
         circuit_generator = get_circuit_generator(circuit_type)
         

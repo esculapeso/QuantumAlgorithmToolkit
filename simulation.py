@@ -96,7 +96,12 @@ def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
     # Plot circuit diagram once
     if plot_circuit and save_results:
         # Create a simplified circuit with just 1 drive step for clearer visualization
-        circuit_generator = get_circuit_generator(circuit_type)
+        # Handle the case where the circuit type name is just "graphene" 
+        viz_circuit_type = circuit_type
+        if viz_circuit_type == "graphene":
+            viz_circuit_type = "graphene_fc"
+            
+        circuit_generator = get_circuit_generator(viz_circuit_type)
         if circuit_generator:
             # Generate a simplified version with 1 drive step for the diagram
             viz_circuit, viz_t = circuit_generator(
