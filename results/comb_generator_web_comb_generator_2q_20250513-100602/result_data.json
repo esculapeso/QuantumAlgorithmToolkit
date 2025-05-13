@@ -1,0 +1,19 @@
+{
+  "parameters": {
+    "circuit_type": "comb_generator",
+    "qubits": 2,
+    "shots": 8192,
+    "drive_steps": 5,
+    "time_points": 100,
+    "max_time": 10.0,
+    "drive_param": 0.9,
+    "init_state": "superposition"
+  },
+  "time_crystal_detected": false,
+  "incommensurate_count": 0,
+  "drive_frequency": 0.1,
+  "linear_combs_detected": true,
+  "log_combs_detected": true,
+  "random_seed": 17405,
+  "timestamp": "20250513100602"
+}

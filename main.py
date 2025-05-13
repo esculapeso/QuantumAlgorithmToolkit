@@ -1295,7 +1295,7 @@ def get_circuit_at_t1(circuit_type, qubits):
         
         # Default parameters
         shots = 1024
-        drive_steps = 5
+        drive_steps = 1  # Use only 1 drive step for the t=1 view to avoid repeating patterns
         drive_param = 0.9
         init_state = 'superposition'
         

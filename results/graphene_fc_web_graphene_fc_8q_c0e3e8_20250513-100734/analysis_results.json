@@ -1,0 +1,40 @@
+{
+  "parameters": {
+    "circuit_type": "graphene_fc",
+    "qubits": 8,
+    "shots": 8192,
+    "drive_steps": 5,
+    "time_points": 100,
+    "max_time": 10.0,
+    "drive_param": 0.9,
+    "init_state": "superposition"
+  },
+  "basic_analysis": {
+    "drive_frequency": 0.1,
+    "has_subharmonics": false,
+    "primary_mx_freq": 0.0,
+    "primary_mz_freq": 0.0
+  },
+  "frequency_crystal_analysis": {
+    "incommensurate_peak_count": 0,
+    "strongest_incommensurate_peak": null
+  },
+  "linear_comb_analysis": {
+    "mx_comb_found": false,
+    "mx_best_omega": 0,
+    "mx_num_teeth": 0,
+    "mz_comb_found": false,
+    "mz_best_omega": 0,
+    "mz_num_teeth": 0
+  },
+  "log_comb_analysis": {
+    "mx_log_comb_found": false,
+    "mx_best_r": 0,
+    "mx_base_freq": 0,
+    "mx_log_num_teeth": 0,
+    "mz_log_comb_found": false,
+    "mz_best_r": 0,
+    "mz_base_freq": 0,
+    "mz_log_num_teeth": 0
+  }
+}
