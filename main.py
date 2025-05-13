@@ -579,6 +579,7 @@ def run_single_simulation(params):
 def get_simulation_preview(result_name):
     """Get a simplified preview of simulation for AJAX requests."""
     try:
+        import glob  # Import here for file searching
         from db_utils import get_simulation_by_name
         
         # Get simulation from database
@@ -604,6 +605,8 @@ def get_simulation_preview(result_name):
             
         # Limit to the first 2 figures for preview
         preview_figures = figure_files[:2] if figure_files else []
+        
+        print(f"Preview for {result_name}: Found {len(preview_figures)} figures")
             
         # Return simplified simulation data
         return jsonify({
