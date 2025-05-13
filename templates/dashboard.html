@@ -104,43 +104,7 @@
                         <p class="text-muted" id="preview-subtitle"></p>
                     </div>
                     
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <div class="card bg-light">
-                                <div class="card-body py-2">
-                                    <h6 class="card-title">Circuit Type</h6>
-                                    <p class="card-text fs-5" id="preview-circuit"></p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="card bg-light">
-                                <div class="card-body py-2">
-                                    <h6 class="card-title">Qubits</h6>
-                                    <p class="card-text fs-5" id="preview-qubits"></p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <div class="card bg-light">
-                                <div class="card-body py-2">
-                                    <h6 class="card-title">Time Crystal</h6>
-                                    <p class="card-text" id="preview-time-crystal"></p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="card bg-light">
-                                <div class="card-body py-2">
-                                    <h6 class="card-title">Frequency Comb</h6>
-                                    <p class="card-text" id="preview-comb"></p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <!-- Summary boxes have been removed -->
                     
                     <div id="preview-figures" class="mt-4">
                         <!-- Figures will be loaded here -->
@@ -381,10 +345,7 @@
             console.error('Error in dashboard initialization:', error);
         }
         
-        // Auto-refresh the page every minute to check for new simulations
-        setTimeout(function() {
-            window.location.reload();
-        }, 60000);
+        // Auto-refresh disabled to maintain figure visibility settings
     });
     
     function initSimulationItems() {
