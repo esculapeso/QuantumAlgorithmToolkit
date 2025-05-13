@@ -393,13 +393,19 @@
                                 const figureElement = document.createElement('div');
                                 figureElement.className = 'text-center mb-4';
                                 // Create the image with error handling
+                                // Use a full URL path to avoid any routing issues
                                 const imgHtml = `
-                                    <img src="/figure/${data.result_name}/${figure}" 
-                                        alt="${figure}" class="img-fluid rounded shadow-sm"
-                                        style="max-height: 400px;"
-                                        onerror="this.onerror=null; this.src=''; this.alt='Error loading image'; this.parentNode.classList.add('border', 'border-danger', 'p-3'); this.style.display='none'; console.error('Failed to load image: ' + this.src);">
-                                    <p class="text-muted small mt-2">${figure}</p>
-                                    <div class="error-message d-none text-danger">Error loading image</div>
+                                    <div class="figure-container text-center">
+                                        <img src="/figure/${data.result_name}/${figure}" 
+                                            alt="${figure}" class="img-fluid rounded shadow-sm"
+                                            style="max-height: 400px; border: 1px solid var(--bs-border-color);"
+                                            onerror="this.onerror=null; this.style.display='none'; console.error('Failed to load image: ' + this.src); this.nextElementSibling.nextElementSibling.classList.remove('d-none');">
+                                        <p class="text-muted small mt-2">${figure.replace('.png', '').replace(/_/g, ' ')}</p>
+                                        <div class="error-message d-none text-danger p-3 border border-danger rounded">
+                                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                            Error loading image: ${figure}
+                                        </div>
+                                    </div>
                                 `;
                                 figureElement.innerHTML = imgHtml;
                                 
@@ -407,9 +413,23 @@
                                 console.log(`Adding figure: /figure/${data.result_name}/${figure}`);
                                 figuresSection.appendChild(figureElement);
                             });
+                            
+                            // Add a title for the figures section
+                            const figuresTitle = document.createElement('h5');
+                            figuresTitle.className = 'mt-4 mb-3';
+                            figuresTitle.textContent = 'Simulation Figures';
+                            
+                            // Add the figures section to the container
+                            figuresContainer.appendChild(figuresTitle);
+                            figuresContainer.appendChild(figuresSection);
                         } else {
                             console.log('No figures found for this simulation');
-                            figuresContainer.innerHTML = '<div class="alert alert-info">No figures available for this simulation.</div>';
+                            
+                            // Create a "no figures" message
+                            const noFiguresMsg = document.createElement('div');
+                            noFiguresMsg.className = 'alert alert-info mt-4';
+                            noFiguresMsg.textContent = 'No figures available for this simulation.';
+                            figuresContainer.appendChild(noFiguresMsg);
                         }
                     })
                     .catch(error => {
