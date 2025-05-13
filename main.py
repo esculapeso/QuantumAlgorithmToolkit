@@ -1043,7 +1043,7 @@ def dashboard():
     # These variables are already defined at the start of the function
     
     return render_template(
-        'dashboard.html',
+        'dashboard_new.html',
         simulations=simulations,
         db_error=db_error,
         recent_results=recent_results,
@@ -1053,7 +1053,8 @@ def dashboard():
         filter_min_qubits=min_qubits,
         filter_max_qubits=max_qubits,
         filter_time_crystal=time_crystal_detected,
-        filter_comb_detected=comb_detected
+        filter_comb_detected=comb_detected,
+        filter_is_starred=request.args.get('is_starred') == 'true'
     )
 
 @app.route('/simulations')
