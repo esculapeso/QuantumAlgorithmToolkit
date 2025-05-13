@@ -79,11 +79,6 @@ def save_simulation_to_db(result, result_name):
     except Exception as e:
         print(f"Error saving simulation to database: {e}")
         db.session.rollback()
-        
-        # Return the database record if it was created successfully
-        if 'sim_result' in locals() and sim_result.id:
-            return sim_result
-        
         return None
 
 def save_peaks(simulation_id, analysis, fc_analysis):
@@ -241,7 +236,7 @@ def get_simulation_by_name(result_name):
     return SimulationResult.query.filter_by(result_name=result_name).first()
 
 def search_simulations(circuit_type=None, min_qubits=None, max_qubits=None, 
-                      time_crystal_detected=None, comb_detected=None):
+                      time_crystal_detected=None, comb_detected=None, is_starred=None):
     """
     Search for simulations based on filters.
     
@@ -251,6 +246,7 @@ def search_simulations(circuit_type=None, min_qubits=None, max_qubits=None,
         max_qubits (int): Filter by maximum number of qubits
         time_crystal_detected (bool): Filter by time crystal detection
         comb_detected (bool): Filter by frequency comb detection
+        is_starred (bool): Filter by starred status
     
     Returns:
         list: Filtered simulation results
@@ -274,5 +270,8 @@ def search_simulations(circuit_type=None, min_qubits=None, max_qubits=None,
             (SimulationResult.linear_combs_detected == True) | 
             (SimulationResult.log_combs_detected == True)
         )
+    
+    if is_starred is not None:
+        query = query.filter(SimulationResult.is_starred == is_starred)
     
     return query.order_by(SimulationResult.created_at.desc()).all()
