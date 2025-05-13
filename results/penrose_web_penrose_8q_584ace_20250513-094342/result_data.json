@@ -1,0 +1,19 @@
+{
+  "parameters": {
+    "circuit_type": "penrose",
+    "qubits": 8,
+    "shots": 8192,
+    "drive_steps": 5,
+    "time_points": 100,
+    "max_time": 10.0,
+    "drive_param": 0.9,
+    "init_state": "superposition"
+  },
+  "time_crystal_detected": true,
+  "incommensurate_count": 0,
+  "drive_frequency": 0.1,
+  "linear_combs_detected": true,
+  "log_combs_detected": false,
+  "random_seed": 36538,
+  "timestamp": "20250513094342"
+}

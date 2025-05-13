@@ -1274,6 +1274,76 @@ def view_result(result_name):
         flash(f'Error viewing result: {str(e)}')
         return redirect(url_for('index'))
 
+@app.route('/circuit-t1/<circuit_type>/<int:qubits>')
+def get_circuit_at_t1(circuit_type, qubits):
+    """
+    Generate and display a circuit diagram at t=1.0.
+    This route generates a circuit of the specified type with the given number of qubits,
+    binds the time parameter to t=1.0, and returns the diagram as a PNG image.
+    """
+    from quantum_circuits import get_circuit_generator
+    from visualization import plot_circuit_diagram
+    import os
+    import io
+    
+    try:
+        # Get the appropriate circuit generator
+        circuit_generator = get_circuit_generator(circuit_type)
+        
+        if not circuit_generator:
+            return f"Unknown circuit type: {circuit_type}", 400
+        
+        # Default parameters
+        shots = 1024
+        drive_steps = 5
+        drive_param = 0.9
+        init_state = 'superposition'
+        
+        # Generate the circuit with time parameter
+        circuit, t = circuit_generator(
+            qubits, 
+            shots=shots, 
+            drive_steps=drive_steps,
+            init_state=init_state,
+            drive_param=drive_param
+        )
+        
+        # Bind the time parameter to t=1.0
+        from qiskit.circuit import ParameterVector
+        param_dict = {t: 1.0}
+        bound_circuit = circuit.assign_parameters(param_dict)
+        
+        # Create temporary directory if needed
+        temp_dir = os.path.join('figures', 'temp')
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Generate a unique filename
+        import uuid
+        unique_id = str(uuid.uuid4())[:8]
+        filename = f"circuit_{circuit_type}_t1_{qubits}q_{unique_id}.png"
+        
+        # Plot the circuit diagram
+        fig_path = plot_circuit_diagram(
+            bound_circuit, 
+            time_value=1.0,
+            circuit_type=f"{circuit_type}_t1",
+            qubit_count=qubits, 
+            save_path=temp_dir
+        )
+        
+        # Return the image
+        if fig_path and isinstance(fig_path, str) and os.path.exists(fig_path):
+            return send_file(fig_path, mimetype='image/png')
+        else:
+            return "Failed to generate circuit diagram", 500
+    
+    except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
+        print(f"Error generating circuit at t=1: {str(e)}")
+        print(error_traceback)
+        return f"Error generating circuit: {str(e)}", 500
+
 @app.route('/figure/<result_name>/<figure_name>')
 def get_figure(result_name, figure_name):
     """Get a figure file for a result."""

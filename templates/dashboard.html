@@ -526,12 +526,20 @@
                                 figureElement.className = 'text-center mb-4';
                                 // Create the image with error handling
                                 // Use a full URL path to avoid any routing issues
+                                // Check if this is a circuit diagram
+                                const isCircuitDiagram = figure.includes('circuit_diagram');
+                                
                                 const imgHtml = `
                                     <div class="figure-container text-center">
                                         <div class="mb-2">
                                             <a href="/figure/${data.result_name}/${figure}" target="_blank" class="btn btn-sm btn-outline-secondary">
                                                 <i class="bi bi-box-arrow-up-right me-1"></i>View in New Tab
                                             </a>
+                                            ${isCircuitDiagram ? `
+                                            <a href="/circuit-t1/${data.circuit_type}/${data.qubits}" target="_blank" class="btn btn-sm btn-outline-primary ms-2">
+                                                <i class="bi bi-clock-history me-1"></i>View at t=1
+                                            </a>
+                                            ` : ''}
                                         </div>
                                         <div class="figure-frame border rounded p-2 mb-2" style="position: relative;">
                                             <img src="/figure/${data.result_name}/${figure}" 
