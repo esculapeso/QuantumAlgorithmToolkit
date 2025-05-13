@@ -95,11 +95,39 @@ def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
     
     # Plot circuit diagram once
     if plot_circuit and save_results:
-        # Plot with a fixed time value (t=1.0) to show the structure
-        sample_t_value = 1.0  # Fixed at t=1 instead of max_time/2
-        plot_circuit_diagram(circuit, time_value=sample_t_value,
-                           circuit_type=circuit_type, qubit_count=qubits,
-                           save_path=fig_path)
+        # Create a simplified circuit with just 1 drive step for clearer visualization
+        circuit_generator = get_circuit_generator(circuit_type)
+        if circuit_generator:
+            # Generate a simplified version with 1 drive step for the diagram
+            viz_circuit, viz_t = circuit_generator(
+                qubits, 
+                shots=shots, 
+                drive_steps=1,  # Use only 1 drive step for visualization
+                init_state=init_state,
+                drive_param=drive_param
+            )
+            
+            # Plot with t=1.0 to show the structure
+            sample_t_value = 1.0
+            param_dict = {viz_t: sample_t_value}
+            if hasattr(viz_circuit, 'assign_parameters'):
+                # Use newer Qiskit 2.0 API
+                bound_viz_circuit = viz_circuit.assign_parameters(param_dict)
+            elif hasattr(viz_circuit, 'bind_parameters'):
+                # Use older Qiskit API
+                bound_viz_circuit = viz_circuit.bind_parameters(param_dict)
+            else:
+                bound_viz_circuit = viz_circuit  # Fallback
+
+            plot_circuit_diagram(bound_viz_circuit, time_value=sample_t_value,
+                               circuit_type=circuit_type, qubit_count=qubits,
+                               save_path=fig_path)
+        else:
+            # Fallback to original method if generator can't be accessed
+            sample_t_value = 1.0
+            plot_circuit_diagram(circuit, time_value=sample_t_value,
+                               circuit_type=circuit_type, qubit_count=qubits,
+                               save_path=fig_path)
 
     # Create the simulator
     try:
