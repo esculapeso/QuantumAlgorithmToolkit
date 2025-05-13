@@ -23,6 +23,9 @@ class SimulationResult(db.Model):
     drive_param = db.Column(db.Float, nullable=False)
     init_state = db.Column(db.String(50), nullable=False)
     
+    # User preferences
+    is_starred = db.Column(db.Boolean, default=False)
+    
     # Analysis results
     drive_frequency = db.Column(db.Float, nullable=True)
     time_crystal_detected = db.Column(db.Boolean, default=False)
