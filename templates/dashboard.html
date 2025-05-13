@@ -391,6 +391,27 @@
                 document.getElementById('preview-loading').style.display = 'block';
                 document.getElementById('preview-content').style.display = 'none';
                 
+                // Update preview star icon
+                const previewStar = document.getElementById('preview-star');
+                if (previewStar) {
+                    // Show the star
+                    previewStar.style.display = 'block';
+                    
+                    // Update the icon based on the starred status
+                    const starIcon = previewStar.querySelector('.star-icon');
+                    if (isStarred) {
+                        starIcon.classList.remove('bi-star');
+                        starIcon.classList.remove('text-secondary');
+                        starIcon.classList.add('bi-star-fill');
+                        starIcon.classList.add('text-warning');
+                    } else {
+                        starIcon.classList.remove('bi-star-fill');
+                        starIcon.classList.remove('text-warning');
+                        starIcon.classList.add('bi-star');
+                        starIcon.classList.add('text-secondary');
+                    }
+                }
+                
                 // Set basic info from data attributes
                 document.getElementById('preview-circuit').textContent = circuit;
                 document.getElementById('preview-qubits').textContent = qubits;
