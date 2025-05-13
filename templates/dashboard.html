@@ -223,27 +223,37 @@
 {% block scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Auto-refresh the page if there are simulations running
-        setTimeout(function() {
-            window.location.reload();
-        }, 60000); // Refresh every minute
+        console.log('Dashboard loaded');
         
         // Initialize simulation item click events
         initSimulationItems();
         
-        // Auto-show the first simulation if available
-        const simulationItems = document.querySelectorAll('.simulation-item');
-        if (simulationItems.length > 0) {
-            // Trigger click on the first simulation
-            simulationItems[0].click();
-        } else {
-            // If no simulations, hide preview card loading and show empty state
-            document.getElementById('preview-loading').style.display = 'none';
-            document.getElementById('preview-content').style.display = 'block';
-            document.getElementById('preview-title').textContent = 'No Simulations Available';
-            document.getElementById('preview-subtitle').textContent = 'Run a simulation to see results here';
-            document.getElementById('preview-figures').innerHTML = '<div class="alert alert-info">No simulation data available. Run a new simulation to get started.</div>';
+        try {
+            // Auto-show the first simulation if available
+            const simulationItems = document.querySelectorAll('.simulation-item');
+            console.log('Found ' + simulationItems.length + ' simulation items');
+            
+            if (simulationItems.length > 0) {
+                // Trigger click on the first simulation
+                console.log('Auto-selecting first simulation');
+                simulationItems[0].click();
+            } else {
+                // If no simulations, hide preview card loading and show empty state
+                console.log('No simulations found, showing empty state');
+                document.getElementById('preview-loading').style.display = 'none';
+                document.getElementById('preview-content').style.display = 'block';
+                document.getElementById('preview-title').textContent = 'No Simulations Available';
+                document.getElementById('preview-subtitle').textContent = 'Run a simulation to see results here';
+                document.getElementById('preview-figures').innerHTML = '<div class="alert alert-info">No simulation data available. Run a new simulation to get started.</div>';
+            }
+        } catch (error) {
+            console.error('Error in dashboard initialization:', error);
         }
+        
+        // Auto-refresh the page every minute to check for new simulations
+        setTimeout(function() {
+            window.location.reload();
+        }, 60000);
     });
     
     function initSimulationItems() {
@@ -284,14 +294,19 @@
                 document.getElementById('preview-view-link').href = `/result/${resultName}`;
                 
                 // Fetch detailed info from the API
+                console.log(`Fetching data for simulation: ${resultName}`);
+                
                 fetch(`/api/simulation/${resultName}`)
                     .then(response => {
+                        console.log(`API response status: ${response.status}`);
                         if (!response.ok) {
                             throw new Error(`Error fetching simulation data: ${response.status}`);
                         }
                         return response.json();
                     })
                     .then(data => {
+                        console.log('Received data:', data);
+                        
                         // Hide loading, show content
                         document.getElementById('preview-loading').style.display = 'none';
                         document.getElementById('preview-content').style.display = 'block';
@@ -306,7 +321,9 @@
                         figuresContainer.innerHTML = '';
                         
                         if (data.figures && data.figures.length > 0) {
-                            // Show all available figures (not just 2 as in preview)
+                            console.log(`Loading ${data.figures.length} figures`);
+                            
+                            // Show all available figures
                             data.figures.forEach(figure => {
                                 const figureElement = document.createElement('div');
                                 figureElement.className = 'text-center mb-4';
@@ -319,6 +336,7 @@
                                 figuresContainer.appendChild(figureElement);
                             });
                         } else {
+                            console.log('No figures found for this simulation');
                             figuresContainer.innerHTML = '<div class="alert alert-info">No figures available for this simulation.</div>';
                         }
                     })

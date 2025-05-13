@@ -577,39 +577,46 @@ def run_single_simulation(params):
 
 @app.route('/api/simulation/<result_name>')
 def get_simulation_preview(result_name):
-    """Get a simplified preview of simulation for AJAX requests."""
+    """Get a simulation data for AJAX requests in the dashboard."""
     try:
         import glob  # Import here for file searching
         from db_utils import get_simulation_by_name
+        
+        print(f"API request for simulation: {result_name}")
         
         # Get simulation from database
         simulation = get_simulation_by_name(result_name)
         
         if not simulation:
+            print(f"Simulation not found: {result_name}")
             return jsonify({"error": "Simulation not found"}), 404
         
         # Get list of figure files
         figure_files = []
         result_path = simulation.results_path
         
+        print(f"Looking for figures in: {result_path}")
+        
         # Check figures folder first
         figure_path = os.path.join(result_path, 'figures')
         if os.path.exists(figure_path):
             png_files = sorted(glob.glob(os.path.join(figure_path, '*.png')))
             figure_files = [os.path.basename(f) for f in png_files]
+            print(f"Found {len(png_files)} PNG files in figures folder")
         
         # No figures in figures folder? Check main folder
         if not figure_files and os.path.exists(result_path):
             png_files = sorted(glob.glob(os.path.join(result_path, '*.png')))
             figure_files = [os.path.basename(f) for f in png_files]
+            print(f"Found {len(png_files)} PNG files in main folder")
             
         # For the dashboard we want all figures
         preview_figures = figure_files if figure_files else []
         
         print(f"Preview for {result_name}: Found {len(preview_figures)} figures")
             
-        # Return simplified simulation data
-        return jsonify({
+        # Return simulation data with all figures
+        response_data = {
             "id": simulation.id,
             "result_name": simulation.result_name,
             "circuit_type": simulation.circuit_type, 
@@ -619,7 +626,10 @@ def get_simulation_preview(result_name):
             "comb_detected": simulation.linear_combs_detected or simulation.log_combs_detected,
             "created_at": simulation.created_at.strftime('%Y-%m-%d %H:%M'),
             "figures": preview_figures
-        })
+        }
+        
+        print(f"Returning data for simulation: {simulation.result_name}")
+        return jsonify(response_data)
             
     except Exception as e:
         print(f"Error getting simulation preview: {str(e)}")
@@ -632,6 +642,7 @@ def dashboard():
     # Import needed modules
     import glob
     import os
+    import traceback  # Add traceback for error logging
     
     # Initialize variables outside the try block to ensure they're always defined
     circuit_type = request.args.get('circuit_type', '')
