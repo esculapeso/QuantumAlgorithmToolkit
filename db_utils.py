@@ -14,64 +14,77 @@ def save_simulation_to_db(result, result_name):
     Returns:
         SimulationResult: The created database record
     """
-    # Extract parameters
-    params = result.get('parameters', {})
-    
-    # Extract analysis results
-    analysis = result.get('analysis', {})
-    fc_analysis = result.get('fc_analysis', {})
-    comb_analysis = result.get('comb_analysis', {})
-    log_comb_analysis = result.get('log_comb_analysis', {})
-    
-    # Create simulation result record
-    sim_result = SimulationResult()
-    sim_result.result_name = result_name
-    sim_result.circuit_type = params.get('circuit_type', '')
-    sim_result.qubits = params.get('qubits', 0)
-    sim_result.shots = params.get('shots', 0)
-    sim_result.drive_steps = params.get('drive_steps', 0)
-    sim_result.time_points = params.get('time_points', 0)
-    sim_result.max_time = params.get('max_time', 0.0)
-    sim_result.drive_param = params.get('drive_param', 0.0)
-    sim_result.init_state = params.get('init_state', '')
-    
-    sim_result.drive_frequency = analysis.get('drive_frequency', 0.0)
-    sim_result.time_crystal_detected = analysis.get('has_subharmonics', False)
-    sim_result.incommensurate_count = fc_analysis.get('incommensurate_peak_count', 0)
-    sim_result.linear_combs_detected = (
-        comb_analysis.get('mx_comb_found', False) or 
-        comb_analysis.get('mz_comb_found', False)
-    )
-    sim_result.log_combs_detected = (
-        log_comb_analysis.get('mx_log_comb_found', False) or 
-        log_comb_analysis.get('mz_log_comb_found', False)
-    )
-    
-    sim_result.results_path = result.get('results_path', '')
-    sim_result.elapsed_time = result.get('elapsed_time', 0.0)
-    
-    # Store additional data that doesn't fit in the schema
-    extra_data = {
-        'notes': '',
-        'peak_counts': {
-            'mx': len(analysis.get('mx_peaks', [])),
-            'my': len(analysis.get('my_peaks', [])),
-            'mz': len(analysis.get('mz_peaks', []))
+    try:
+        # Extract parameters
+        params = result.get('parameters', {})
+        
+        # Extract analysis results
+        analysis = result.get('analysis', {})
+        fc_analysis = result.get('fc_analysis', {})
+        comb_analysis = result.get('comb_analysis', {})
+        log_comb_analysis = result.get('log_comb_analysis', {})
+        
+        # Create simulation result record
+        sim_result = SimulationResult()
+        sim_result.result_name = result_name
+        sim_result.circuit_type = params.get('circuit_type', '')
+        
+        # Convert numpy types to Python native types
+        sim_result.qubits = convert_numpy_type(params.get('qubits', 0))
+        sim_result.shots = convert_numpy_type(params.get('shots', 0))
+        sim_result.drive_steps = convert_numpy_type(params.get('drive_steps', 0))
+        sim_result.time_points = convert_numpy_type(params.get('time_points', 0))
+        sim_result.max_time = convert_numpy_type(params.get('max_time', 0.0))
+        sim_result.drive_param = convert_numpy_type(params.get('drive_param', 0.0))
+        sim_result.init_state = params.get('init_state', '')
+        
+        sim_result.drive_frequency = convert_numpy_type(analysis.get('drive_frequency', 0.0))
+        sim_result.time_crystal_detected = convert_numpy_type(analysis.get('has_subharmonics', False))
+        sim_result.incommensurate_count = convert_numpy_type(fc_analysis.get('incommensurate_peak_count', 0))
+        
+        # Convert boolean logic values
+        mx_comb = convert_numpy_type(comb_analysis.get('mx_comb_found', False))
+        mz_comb = convert_numpy_type(comb_analysis.get('mz_comb_found', False))
+        sim_result.linear_combs_detected = (mx_comb or mz_comb)
+        
+        mx_log_comb = convert_numpy_type(log_comb_analysis.get('mx_log_comb_found', False))
+        mz_log_comb = convert_numpy_type(log_comb_analysis.get('mz_log_comb_found', False))
+        sim_result.log_combs_detected = (mx_log_comb or mz_log_comb)
+        
+        sim_result.results_path = result.get('results_path', '')
+        sim_result.elapsed_time = convert_numpy_type(result.get('elapsed_time', 0.0))
+        
+        # Store additional data that doesn't fit in the schema
+        extra_data = {
+            'notes': '',
+            'peak_counts': {
+                'mx': len(analysis.get('mx_peaks', [])),
+                'my': len(analysis.get('my_peaks', [])),
+                'mz': len(analysis.get('mz_peaks', []))
+            }
         }
-    }
-    sim_result.set_extra_data(extra_data)
-    
-    # Save to database
-    db.session.add(sim_result)
-    db.session.commit()
-    
-    # Add frequency peaks information
-    save_peaks(sim_result.id, analysis, fc_analysis)
-    
-    # Add comb structures information
-    save_combs(sim_result.id, comb_analysis, log_comb_analysis)
-    
-    return sim_result
+        sim_result.set_extra_data(extra_data)
+        
+        # Save to database
+        db.session.add(sim_result)
+        db.session.commit()
+        
+        # Add frequency peaks information
+        save_peaks(sim_result.id, analysis, fc_analysis)
+        
+        # Add comb structures information
+        save_combs(sim_result.id, comb_analysis, log_comb_analysis)
+        
+        return sim_result
+    except Exception as e:
+        print(f"Error saving simulation to database: {e}")
+        db.session.rollback()
+        
+        # Return the database record if it was created successfully
+        if 'sim_result' in locals() and sim_result.id:
+            return sim_result
+        
+        return None
 
 def save_peaks(simulation_id, analysis, fc_analysis):
     """Save detected frequency peaks to the database."""
