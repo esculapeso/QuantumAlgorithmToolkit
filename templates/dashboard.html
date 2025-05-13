@@ -534,7 +534,123 @@
                             });
                         }
                         
-                        const detailsHtml = `
+                        // Initialize the preview section
+                        const figuresContainer = document.getElementById('preview-figures');
+                        figuresContainer.innerHTML = '';
+                        
+                        // -- SECTION 1: Figure Visibility Controls --
+                        const controls = document.createElement('div');
+                        controls.className = 'mb-3 card';
+                        controls.innerHTML = `
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0">Figure Visibility</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-flex flex-wrap gap-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input figure-toggle" type="checkbox" id="toggle-circuit" 
+                                               data-figure-type="circuit_diagram" ${!data.figures.some(f => f.includes('circuit_diagram')) ? 'disabled' : ''}>
+                                        <label class="form-check-label" for="toggle-circuit">
+                                            Circuit Diagram
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input figure-toggle" type="checkbox" id="toggle-expectation"
+                                               data-figure-type="expectation_values" ${!data.figures.some(f => f.includes('expectation_values')) ? 'disabled' : ''}>
+                                        <label class="form-check-label" for="toggle-expectation">
+                                            Expectation Values
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input figure-toggle" type="checkbox" id="toggle-fft" checked
+                                               data-figure-type="fft_analysis" ${!data.figures.some(f => f.includes('fft_analysis')) ? 'disabled' : ''}>
+                                        <label class="form-check-label" for="toggle-fft">
+                                            FFT Analysis (Spectrum)
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input figure-toggle" type="checkbox" id="toggle-comb"
+                                               data-figure-type="comb_analysis" ${!data.figures.some(f => f.includes('comb_analysis')) ? 'disabled' : ''}>
+                                        <label class="form-check-label" for="toggle-comb">
+                                            Comb Analysis
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        figuresContainer.appendChild(controls);
+                        
+                        // -- SECTION 2: Figures --
+                        const figureSection = document.createElement('div');
+                        figureSection.className = 'figures-section mb-4';
+                        
+                        if (data.figures && data.figures.length > 0) {
+                            data.figures.forEach(figure => {
+                                const figureEl = document.createElement('div');
+                                figureEl.className = 'figure-container text-center mb-4';
+                                
+                                // Set visibility based on figure type
+                                const isCircuitDiagram = figure.includes('circuit_diagram');
+                                const isExpectation = figure.includes('expectation_values');
+                                const isCombAnalysis = figure.includes('comb_analysis');
+                                const isFFTAnalysis = figure.includes('fft_analysis');
+                                
+                                // Only show FFT analysis by default
+                                if (!isFFTAnalysis) {
+                                    figureEl.style.display = 'none';
+                                }
+                                
+                                // Set data attribute for filtering
+                                if (isCircuitDiagram) figureEl.dataset.figureType = 'circuit_diagram';
+                                else if (isExpectation) figureEl.dataset.figureType = 'expectation_values';
+                                else if (isFFTAnalysis) figureEl.dataset.figureType = 'fft_analysis';
+                                else if (isCombAnalysis) figureEl.dataset.figureType = 'comb_analysis';
+                                
+                                figureEl.innerHTML = `
+                                    <div class="mb-2">
+                                        <a href="/figure/${data.result_name}/${figure}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                                            <i class="bi bi-box-arrow-up-right me-1"></i>View in New Tab
+                                        </a>
+                                        ${isCircuitDiagram ? `
+                                        <a href="/circuit-t1/${data.circuit_type}/${data.qubits}" target="_blank" class="btn btn-sm btn-outline-primary ms-2">
+                                            <i class="bi bi-clock-history me-1"></i>View at t=1 (single step)
+                                        </a>
+                                        ` : ''}
+                                    </div>
+                                    <div class="figure-frame border rounded p-2 mb-2" style="position: relative;">
+                                        <img src="/figure/${data.result_name}/${figure}" 
+                                            alt="${figure}" class="img-fluid"
+                                            style="max-height: 350px;"
+                                            onload="this.parentNode.classList.add('border-success')"
+                                            onerror="this.onerror=null; this.style.display='none'; console.error('Failed to load image: ' + this.src); this.nextElementSibling.style.display='block';">
+                                        <div class="error-message text-danger p-3 border border-danger rounded" style="display: none;">
+                                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                            Error loading image: ${figure}
+                                            <div class="mt-2">
+                                                <button class="btn btn-sm btn-outline-primary retry-button" 
+                                                        onclick="reloadImage(this, '/figure/${data.result_name}/${figure}')">
+                                                    <i class="bi bi-arrow-clockwise me-1"></i>Retry
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p class="text-muted small mt-1">${figure.replace('.png', '').replace(/_/g, ' ')}</p>
+                                `;
+                                figureSection.appendChild(figureEl);
+                                console.log(`Adding figure: /figure/${data.result_name}/${figure}`);
+                            });
+                        } else {
+                            figureSection.innerHTML = `
+                                <div class="alert alert-info">
+                                    No figures available for this simulation.
+                                </div>
+                            `;
+                        }
+                        figuresContainer.appendChild(figureSection);
+                        
+                        // -- SECTION 3: Simulation Details --
+                        const detailsSection = document.createElement('div');
+                        detailsSection.innerHTML = `
                             <div class="row mb-4">
                                 <div class="col-md-6">
                                     <div class="card h-100">
@@ -580,163 +696,33 @@
                                         </div>
                                     </div>
                                 </div>
-                            </div>`;
+                            </div>
+                        `;
+                        figuresContainer.appendChild(detailsSection);
                         
-                        // Get the figures container and add the details section
-                        const figuresContainer = document.getElementById('preview-figures');
-                        figuresContainer.innerHTML = detailsHtml;
-                        
-                        // Now add figures after the details section
-                        const figuresSection = document.createElement('div');
-                        figuresSection.className = 'figures-section';
-                        
-                        if (data.figures && data.figures.length > 0) {
-                            console.log(`Loading ${data.figures.length} figures`);
-                            
-                            // Add figure visibility controls
-                            const figureControlsDiv = document.createElement('div');
-                            figureControlsDiv.className = 'mb-3 card';
-                            figureControlsDiv.innerHTML = `
-                                <div class="card-header bg-light">
-                                    <h6 class="mb-0">Figure Visibility</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="d-flex flex-wrap gap-3">
-                                        <div class="form-check">
-                                            <input class="form-check-input figure-toggle" type="checkbox" id="toggle-circuit" 
-                                                   data-figure-type="circuit_diagram" ${!data.figures.some(f => f.includes('circuit_diagram')) ? 'disabled' : ''}>
-                                            <label class="form-check-label" for="toggle-circuit">
-                                                Circuit Diagram
-                                            </label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input figure-toggle" type="checkbox" id="toggle-expectation"
-                                                   data-figure-type="expectation_values" ${!data.figures.some(f => f.includes('expectation_values')) ? 'disabled' : ''}>
-                                            <label class="form-check-label" for="toggle-expectation">
-                                                Expectation Values
-                                            </label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input figure-toggle" type="checkbox" id="toggle-fft" checked
-                                                   data-figure-type="fft_analysis" ${!data.figures.some(f => f.includes('fft_analysis')) ? 'disabled' : ''}>
-                                            <label class="form-check-label" for="toggle-fft">
-                                                FFT Analysis (Spectrum)
-                                            </label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input figure-toggle" type="checkbox" id="toggle-comb"
-                                                   data-figure-type="comb_analysis" ${!data.figures.some(f => f.includes('comb_analysis')) ? 'disabled' : ''}>
-                                            <label class="form-check-label" for="toggle-comb">
-                                                Comb Analysis
-                                            </label>
-                                        </div>
-                                    </div>
-                                </div>
-                            `;
-                            figuresSection.appendChild(figureControlsDiv);
-                            
-                            // Show figures with visibility control
-                            data.figures.forEach(figure => {
-                                const figureElement = document.createElement('div');
-                                figureElement.className = 'text-center mb-4 figure-container';
+                        // Add reload image function to window scope
+                        if (!window.reloadImage) {
+                            window.reloadImage = function(button, src) {
+                                const container = button.closest('.figure-frame');
+                                const errorDiv = container.querySelector('.error-message');
+                                const img = document.createElement('img');
                                 
-                                // Initially hide circuit diagrams and expectation values
-                                const isCircuitDiagram = figure.includes('circuit_diagram');
-                                const isExpectation = figure.includes('expectation_values');
-                                const isCombAnalysis = figure.includes('comb_analysis');
-                                // Only FFT (spectrum) is visible by default
-                                const isFFTAnalysis = figure.includes('fft_analysis');
+                                img.src = src + '?t=' + new Date().getTime();
+                                img.alt = src.split('/').pop();
+                                img.className = 'img-fluid';
+                                img.style.maxHeight = '350px';
                                 
-                                if (!isFFTAnalysis) {
-                                    figureElement.style.display = 'none';
-                                }
+                                img.onload = function() {
+                                    container.classList.add('border-success');
+                                    errorDiv.style.display = 'none';
+                                    container.prepend(img);
+                                };
                                 
-                                // Set data attribute for filtering
-                                if (isCircuitDiagram) figureElement.dataset.figureType = 'circuit_diagram';
-                                else if (isExpectation) figureElement.dataset.figureType = 'expectation_values';
-                                else if (isFFTAnalysis) figureElement.dataset.figureType = 'fft_analysis';
-                                else if (isCombAnalysis) figureElement.dataset.figureType = 'comb_analysis';
-                                
-                                const imgHtml = `
-                                    <div class="figure-container text-center">
-                                        <div class="mb-2">
-                                            <a href="/figure/${data.result_name}/${figure}" target="_blank" class="btn btn-sm btn-outline-secondary">
-                                                <i class="bi bi-box-arrow-up-right me-1"></i>View in New Tab
-                                            </a>
-                                            ${isCircuitDiagram ? `
-                                            <a href="/circuit-t1/${data.circuit_type}/${data.qubits}" target="_blank" class="btn btn-sm btn-outline-primary ms-2">
-                                                <i class="bi bi-clock-history me-1"></i>View at t=1 (single step)
-                                            </a>
-                                            ` : ''}
-                                        </div>
-                                        <div class="figure-frame border rounded p-2 mb-2" style="position: relative;">
-                                            <img src="/figure/${data.result_name}/${figure}" 
-                                                alt="${figure}" class="img-fluid"
-                                                style="max-height: 350px;"
-                                                onload="this.parentNode.classList.add('border-success')"
-                                                onerror="this.onerror=null; this.style.display='none'; console.error('Failed to load image: ' + this.src); this.nextElementSibling.style.display='block';">
-                                            <div class="error-message text-danger p-3 border border-danger rounded" style="display: none;">
-                                                <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                                                Error loading image: ${figure}
-                                                <div class="mt-2">
-                                                    <button class="btn btn-sm btn-outline-primary retry-button" 
-                                                            onclick="reloadImage(this, '/figure/${data.result_name}/${figure}')">
-                                                        <i class="bi bi-arrow-clockwise me-1"></i>Retry
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <p class="text-muted small mt-1">${figure.replace('.png', '').replace(/_/g, ' ')}</p>
-                                    </div>
-                                `;
-                                
-                                // Add a function to reload images
-                                if (!window.reloadImage) {
-                                    window.reloadImage = function(button, src) {
-                                        const container = button.closest('.figure-frame');
-                                        const errorDiv = container.querySelector('.error-message');
-                                        const img = document.createElement('img');
-                                        
-                                        img.src = src + '?t=' + new Date().getTime();
-                                        img.alt = src.split('/').pop();
-                                        img.className = 'img-fluid';
-                                        img.style.maxHeight = '350px';
-                                        
-                                        img.onload = function() {
-                                            container.classList.add('border-success');
-                                            errorDiv.style.display = 'none';
-                                            container.prepend(img);
-                                        };
-                                        
-                                        img.onerror = function() {
-                                            console.error('Failed to reload image: ' + src);
-                                            errorDiv.style.display = 'block';
-                                        };
-                                    };
-                                }
-                                figureElement.innerHTML = imgHtml;
-                                
-                                // Add a console message to debug
-                                console.log(`Adding figure: /figure/${data.result_name}/${figure}`);
-                                figuresSection.appendChild(figureElement);
-                            });
-                            
-                            // Add a title for the figures section
-                            const figuresTitle = document.createElement('h5');
-                            figuresTitle.className = 'mt-4 mb-3';
-                            figuresTitle.textContent = 'Simulation Figures';
-                            
-                            // Add the figures section to the container
-                            figuresContainer.appendChild(figuresTitle);
-                            figuresContainer.appendChild(figuresSection);
-                        } else {
-                            console.log('No figures found for this simulation');
-                            
-                            // Create a "no figures" message
-                            const noFiguresMsg = document.createElement('div');
-                            noFiguresMsg.className = 'alert alert-info mt-4';
-                            noFiguresMsg.textContent = 'No figures available for this simulation.';
-                            figuresContainer.appendChild(noFiguresMsg);
+                                img.onerror = function() {
+                                    console.error('Failed to reload image: ' + src);
+                                    errorDiv.style.display = 'block';
+                                };
+                            };
                         }
                     })
                     .catch(error => {
