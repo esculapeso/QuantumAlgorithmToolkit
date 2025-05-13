@@ -95,8 +95,8 @@ def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
     
     # Plot circuit diagram once
     if plot_circuit and save_results:
-        # Plot with a sample time value to show the structure
-        sample_t_value = max_time / 2.0
+        # Plot with a fixed time value (t=1.0) to show the structure
+        sample_t_value = 1.0  # Fixed at t=1 instead of max_time/2
         plot_circuit_diagram(circuit, time_value=sample_t_value,
                            circuit_type=circuit_type, qubit_count=qubits,
                            save_path=fig_path)
