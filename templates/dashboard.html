@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+
+{% block title %}Quantum Simulation Dashboard{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-12">
+        <h1 class="display-5 fw-bold">Quantum Simulation Dashboard</h1>
+        <p class="lead">View and analyze your quantum simulation results</p>
+        <div class="d-flex gap-2 mb-4">
+            <a href="{{ url_for('index') }}" class="btn btn-primary">Run New Simulation</a>
+            <a href="{{ url_for('parameter_sweep') }}" class="btn btn-outline-primary">Parameter Sweep</a>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Left column: Detailed preview panel -->
+    <div class="col-lg-7">
+        <!-- Preview Card -->
+        <div class="card shadow-sm mb-4" id="preview-card">
+            <div class="card-header bg-primary-subtle d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Simulation Results</h5>
+            </div>
+            <div class="card-body">
+                <div id="preview-loading" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading simulation data...</p>
+                </div>
+                <div id="preview-content" style="display: none;">
+                    <div class="mb-3">
+                        <h5 id="preview-title">Simulation Details</h5>
+                        <p class="text-muted" id="preview-subtitle"></p>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body py-2">
+                                    <h6 class="card-title">Circuit Type</h6>
+                                    <p class="card-text fs-5" id="preview-circuit"></p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body py-2">
+                                    <h6 class="card-title">Qubits</h6>
+                                    <p class="card-text fs-5" id="preview-qubits"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body py-2">
+                                    <h6 class="card-title">Time Crystal</h6>
+                                    <p class="card-text" id="preview-time-crystal"></p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body py-2">
+                                    <h6 class="card-title">Frequency Comb</h6>
+                                    <p class="card-text" id="preview-comb"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="preview-figures" class="mt-4">
+                        <!-- Figures will be loaded here -->
+                    </div>
+                    
+                    <div class="mt-3 text-center">
+                        <a id="preview-view-link" href="#" class="btn btn-primary">View Full Details</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Analysis Tips Card -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white">
+                <h5 class="card-title mb-0">Simulation Analysis Tips</h5>
+            </div>
+            <div class="card-body">
+                <p class="small">For best results when analyzing quantum simulations:</p>
+                <ul class="small">
+                    <li>Time crystals typically show up as peaks at rational multiples of the drive frequency</li>
+                    <li>Frequency combs appear as equally spaced peaks in the FFT spectrum</li>
+                    <li>The Graphene FC circuit type is most likely to produce time crystals</li>
+                    <li>Use 8-10 qubits for the best balance between accuracy and performance</li>
+                </ul>
+                <hr>
+                <p class="small text-muted">
+                    Select a simulation from the list on the right to view its details and figures.
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Right column: Simulations list and search filters -->
+    <div class="col-lg-5">
+        <!-- Search Filters Card -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-secondary-subtle">
+                <h5 class="card-title mb-0">Search Simulations</h5>
+            </div>
+            <div class="card-body">
+                <form method="get" action="{{ url_for('dashboard') }}">
+                    <div class="mb-3">
+                        <label for="circuit_type" class="form-label">Circuit Type:</label>
+                        <select name="circuit_type" id="circuit_type" class="form-select">
+                            <option value="">All</option>
+                            {% for circuit in circuit_types %}
+                            <option value="{{ circuit.id }}" {% if filter_circuit_type == circuit.id %}selected{% endif %}>{{ circuit.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="min_qubits" class="form-label">Min Qubits:</label>
+                                <input type="number" name="min_qubits" id="min_qubits" class="form-control" min="1" max="20" 
+                                      value="{{ filter_min_qubits if filter_min_qubits is not none }}">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="max_qubits" class="form-label">Max Qubits:</label>
+                                <input type="number" name="max_qubits" id="max_qubits" class="form-control" min="1" max="20"
+                                      value="{{ filter_max_qubits if filter_max_qubits is not none }}">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="time_crystal" id="time_crystal" value="true"
+                                  {% if filter_time_crystal %}checked{% endif %}>
+                            <label class="form-check-label" for="time_crystal">Time Crystal Detected</label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="comb_detected" id="comb_detected" value="true"
+                                  {% if filter_comb_detected %}checked{% endif %}>
+                            <label class="form-check-label" for="comb_detected">Frequency Comb Detected</label>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">Search</button>
+                        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Reset</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Completed simulations card -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-info-subtle d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Completed Simulations</h5>
+                <span class="badge bg-info">{{ simulations|length }} results</span>
+            </div>
+            <div class="card-body p-0">
+                {% if simulations %}
+                    <div class="list-group list-group-flush">
+                        {% for sim in simulations %}
+                        <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-start simulation-item"
+                                data-result-name="{{ sim.result_name }}" 
+                                data-circuit="{{ sim.circuit_type }}"
+                                data-qubits="{{ sim.qubits }}"
+                                data-time-crystal="{{ sim.time_crystal_detected|lower }}"
+                                data-comb="{{ (sim.linear_combs_detected or sim.log_combs_detected)|lower }}">
+                            <div>
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h6 class="mb-1">{{ sim.circuit_type }}</h6>
+                                    <small>{{ sim.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                                </div>
+                                <div class="small text-muted">{{ sim.qubits }} qubits, {{ sim.time_points }} time points</div>
+                            </div>
+                            <div>
+                                {% if sim.time_crystal_detected %}
+                                    <span class="badge bg-success rounded-pill">TC</span>
+                                {% endif %}
+                                {% if sim.linear_combs_detected or sim.log_combs_detected %}
+                                    <span class="badge bg-primary rounded-pill">FC</span>
+                                {% endif %}
+                            </div>
+                        </button>
+                        {% endfor %}
+                    </div>
+                {% elif db_error %}
+                    <div class="alert alert-warning m-3">
+                        <p>Could not load database results: {{ db_error }}</p>
+                        {% if recent_results %}
+                            <h5>Recent simulation results:</h5>
+                            <ul>
+                                {% for result_name in recent_results %}
+                                    <li><a href="{{ url_for('view_result', result_name=result_name) }}">{{ result_name }}</a></li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-info m-3">No completed simulation results found.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Auto-refresh the page if there are simulations running
+        setTimeout(function() {
+            window.location.reload();
+        }, 60000); // Refresh every minute
+        
+        // Initialize simulation item click events
+        initSimulationItems();
+        
+        // Auto-show the first simulation if available
+        const simulationItems = document.querySelectorAll('.simulation-item');
+        if (simulationItems.length > 0) {
+            // Trigger click on the first simulation
+            simulationItems[0].click();
+        } else {
+            // If no simulations, hide preview card loading and show empty state
+            document.getElementById('preview-loading').style.display = 'none';
+            document.getElementById('preview-content').style.display = 'block';
+            document.getElementById('preview-title').textContent = 'No Simulations Available';
+            document.getElementById('preview-subtitle').textContent = 'Run a simulation to see results here';
+            document.getElementById('preview-figures').innerHTML = '<div class="alert alert-info">No simulation data available. Run a new simulation to get started.</div>';
+        }
+    });
+    
+    function initSimulationItems() {
+        // Get all simulation items
+        const simulationItems = document.querySelectorAll('.simulation-item');
+        
+        // Add click handler to each simulation item
+        simulationItems.forEach(item => {
+            item.addEventListener('click', function() {
+                // Remove active class from all items
+                simulationItems.forEach(i => i.classList.remove('active'));
+                
+                // Add active class to clicked item
+                this.classList.add('active');
+                
+                // Get data attributes
+                const resultName = this.dataset.resultName;
+                const circuit = this.dataset.circuit;
+                const qubits = this.dataset.qubits;
+                const timeCrystal = this.dataset.timeCrystal === 'true';
+                const comb = this.dataset.comb === 'true';
+                
+                // Show loading state
+                document.getElementById('preview-loading').style.display = 'block';
+                document.getElementById('preview-content').style.display = 'none';
+                
+                // Set basic info from data attributes
+                document.getElementById('preview-circuit').textContent = circuit;
+                document.getElementById('preview-qubits').textContent = qubits;
+                document.getElementById('preview-time-crystal').innerHTML = timeCrystal 
+                    ? '<span class="badge bg-success">Detected</span>' 
+                    : '<span class="badge bg-secondary">Not Detected</span>';
+                document.getElementById('preview-comb').innerHTML = comb 
+                    ? '<span class="badge bg-success">Detected</span>' 
+                    : '<span class="badge bg-secondary">Not Detected</span>';
+                
+                // Update the view link
+                document.getElementById('preview-view-link').href = `/result/${resultName}`;
+                
+                // Fetch detailed info from the API
+                fetch(`/api/simulation/${resultName}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`Error fetching simulation data: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        // Hide loading, show content
+                        document.getElementById('preview-loading').style.display = 'none';
+                        document.getElementById('preview-content').style.display = 'block';
+                        
+                        // Update title and subtitle
+                        document.getElementById('preview-title').textContent = `${data.circuit_type} Simulation`;
+                        document.getElementById('preview-subtitle').textContent = 
+                            `${data.qubits} qubits, ${data.time_points} time points | ${data.created_at}`;
+                        
+                        // Load all available figures
+                        const figuresContainer = document.getElementById('preview-figures');
+                        figuresContainer.innerHTML = '';
+                        
+                        if (data.figures && data.figures.length > 0) {
+                            // Show all available figures (not just 2 as in preview)
+                            data.figures.forEach(figure => {
+                                const figureElement = document.createElement('div');
+                                figureElement.className = 'text-center mb-4';
+                                figureElement.innerHTML = `
+                                    <img src="/result/${data.result_name}/figure/${figure}" 
+                                        alt="${figure}" class="img-fluid rounded shadow-sm"
+                                        style="max-height: 400px;">
+                                    <p class="text-muted small mt-2">${figure}</p>
+                                `;
+                                figuresContainer.appendChild(figureElement);
+                            });
+                        } else {
+                            figuresContainer.innerHTML = '<div class="alert alert-info">No figures available for this simulation.</div>';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading simulation details:', error);
+                        document.getElementById('preview-loading').style.display = 'none';
+                        document.getElementById('preview-content').style.display = 'block';
+                        document.getElementById('preview-figures').innerHTML = 
+                            `<div class="alert alert-danger">Error loading details: ${error.message}</div>`;
+                    });
+            });
+        });
+    }
+</script>
+{% endblock %}

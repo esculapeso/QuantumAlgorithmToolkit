@@ -603,8 +603,8 @@ def get_simulation_preview(result_name):
             png_files = sorted(glob.glob(os.path.join(result_path, '*.png')))
             figure_files = [os.path.basename(f) for f in png_files]
             
-        # Limit to the first 2 figures for preview
-        preview_figures = figure_files[:2] if figure_files else []
+        # For the dashboard we want all figures
+        preview_figures = figure_files if figure_files else []
         
         print(f"Preview for {result_name}: Found {len(preview_figures)} figures")
             
@@ -625,6 +625,81 @@ def get_simulation_preview(result_name):
         print(f"Error getting simulation preview: {str(e)}")
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+@app.route('/dashboard')
+def dashboard():
+    """Dashboard view with simulations list and preview panel side by side."""
+    # Import needed modules
+    import glob
+    import os
+    
+    # Initialize variables outside the try block to ensure they're always defined
+    circuit_type = request.args.get('circuit_type', '')
+    min_qubits = request.args.get('min_qubits', type=int)
+    max_qubits = request.args.get('max_qubits', type=int)
+    time_crystal_detected = request.args.get('time_crystal') == 'true'
+    comb_detected = request.args.get('comb_detected') == 'true'
+    simulations = []
+    db_error = None
+    
+    try:
+        from db_utils import search_simulations
+        
+        # If no filters specified, don't apply them
+        if not circuit_type and not min_qubits and not max_qubits and \
+           not request.args.get('time_crystal') and not request.args.get('comb_detected'):
+            time_crystal_detected = None
+            comb_detected = None
+        
+        # Search simulations using filters
+        simulations = search_simulations(
+            circuit_type=circuit_type if circuit_type else None,
+            min_qubits=min_qubits,
+            max_qubits=max_qubits,
+            time_crystal_detected=time_crystal_detected,
+            comb_detected=comb_detected
+        )
+        
+        # Sort by newest first
+        simulations = sorted(simulations, key=lambda x: x.created_at, reverse=True)
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        simulations = []
+        db_error = str(e)
+    
+    # Get list of circuit types for filter dropdown
+    circuit_types = [
+        {"id": "penrose", "name": "Penrose"},
+        {"id": "qft_basic", "name": "QFT Basic"},
+        {"id": "comb_generator", "name": "Comb Generator"},
+        {"id": "comb_twistor", "name": "Comb Twistor"},
+        {"id": "graphene_fc", "name": "Graphene FC"},
+    ]
+    
+    # Attempt to get recent results from file system if database fails
+    recent_results = []
+    if db_error:
+        # Try to get results from file system as fallback
+        result_dirs = glob.glob('results/*')
+        recent_results = [os.path.basename(d) for d in sorted(result_dirs, key=os.path.getmtime, reverse=True)[:10]]
+    
+    # These variables are already defined at the start of the function
+    
+    return render_template(
+        'dashboard.html',
+        simulations=simulations,
+        db_error=db_error,
+        recent_results=recent_results,
+        circuit_types=circuit_types,
+        # Pass filter values back to template
+        filter_circuit_type=circuit_type,
+        filter_min_qubits=min_qubits,
+        filter_max_qubits=max_qubits,
+        filter_time_crystal=time_crystal_detected,
+        filter_comb_detected=comb_detected
+    )
 
 @app.route('/simulations')
 def view_simulations():
