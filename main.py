@@ -621,6 +621,7 @@ def get_simulation_preview(result_name):
             comb_detected = simulation.linear_combs_detected or simulation.log_combs_detected
             created_at = simulation.created_at.strftime('%Y-%m-%d %H:%M')
             sim_id = simulation.id
+            is_starred = simulation.is_starred
             
         # Simulation not in database, try to load from filesystem
         else:
@@ -659,6 +660,7 @@ def get_simulation_preview(result_name):
             time_crystal_detected = False
             comb_detected = False
             sim_id = 0
+            is_starred = False
             
             # Try to parse from files if they exist
             results_json = os.path.join(result_path, 'results.json')
@@ -719,6 +721,7 @@ def get_simulation_preview(result_name):
             "time_crystal_detected": time_crystal_detected,
             "comb_detected": comb_detected,
             "created_at": created_at,
+            "is_starred": is_starred,
             "figures": preview_figures
         }
         
@@ -1083,6 +1086,87 @@ def view_simulations():
 
 # The simulation_status route has been removed as we no longer track individual
 # simulation status through BACKGROUND_SIMULATIONS dictionary
+
+@app.route('/api/simulation/<result_name>/toggle_star', methods=['POST'])
+def toggle_simulation_star(result_name):
+    """Toggle the starred status of a simulation."""
+    try:
+        from db_utils import get_simulation_by_name
+        from models import db
+        
+        # Get the simulation
+        simulation = get_simulation_by_name(result_name)
+        
+        if not simulation:
+            return jsonify({
+                'status': 'error',
+                'message': f'Simulation {result_name} not found'
+            }), 404
+        
+        # Toggle the is_starred flag
+        simulation.is_starred = not simulation.is_starred
+        
+        # Save to database
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'success',
+            'result_name': result_name,
+            'is_starred': simulation.is_starred
+        })
+        
+    except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
+        print(f"Error toggling star status: {str(e)}")
+        print(error_traceback)
+        
+        return jsonify({
+            'status': 'error',
+            'message': f'Error toggling star status: {str(e)}'
+        }), 500
+
+@app.route('/api/simulations/starred', methods=['GET'])
+def get_starred_simulations():
+    """Get all starred simulations."""
+    try:
+        from models import SimulationResult
+        
+        # Query all starred simulations
+        starred_simulations = SimulationResult.query.filter_by(is_starred=True).order_by(
+            SimulationResult.created_at.desc()
+        ).all()
+        
+        # Format the response
+        results = []
+        for sim in starred_simulations:
+            results.append({
+                'id': sim.id,
+                'result_name': sim.result_name,
+                'circuit_type': sim.circuit_type,
+                'qubits': sim.qubits,
+                'time_points': sim.time_points,
+                'created_at': sim.created_at.strftime('%Y-%m-%d %H:%M'),
+                'time_crystal_detected': sim.time_crystal_detected,
+                'comb_detected': sim.linear_combs_detected or sim.log_combs_detected,
+                'is_starred': sim.is_starred
+            })
+        
+        return jsonify({
+            'status': 'success',
+            'starred_simulations': results
+        })
+        
+    except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
+        print(f"Error getting starred simulations: {str(e)}")
+        print(error_traceback)
+        
+        return jsonify({
+            'status': 'error',
+            'message': f'Error getting starred simulations: {str(e)}'
+        }), 500
 
 @app.route('/result/<result_name>')
 def view_result(result_name):
