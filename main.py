@@ -1286,6 +1286,8 @@ def get_circuit_at_t1(circuit_type, qubits):
     import os
     import io
     
+    print(f"DEBUG: Generating circuit at t=1 for {circuit_type} with {qubits} qubits")
+    
     try:
         # Get the appropriate circuit generator
         circuit_generator = get_circuit_generator(circuit_type)
@@ -1299,6 +1301,8 @@ def get_circuit_at_t1(circuit_type, qubits):
         drive_param = 0.9
         init_state = 'superposition'
         
+        print(f"DEBUG: Using drive_steps={drive_steps}")
+        
         # Generate the circuit with time parameter
         circuit, t = circuit_generator(
             qubits, 
@@ -1308,10 +1312,14 @@ def get_circuit_at_t1(circuit_type, qubits):
             drive_param=drive_param
         )
         
+        print(f"DEBUG: Generated circuit with depth {circuit.depth()}")
+        
         # Bind the time parameter to t=1.0
         from qiskit.circuit import ParameterVector
         param_dict = {t: 1.0}
         bound_circuit = circuit.assign_parameters(param_dict)
+        
+        print(f"DEBUG: Bound circuit with t=1.0, depth: {bound_circuit.depth()}")
         
         # Create temporary directory if needed
         temp_dir = os.path.join('figures', 'temp')
@@ -1323,6 +1331,7 @@ def get_circuit_at_t1(circuit_type, qubits):
         filename = f"circuit_{circuit_type}_t1_{qubits}q_{unique_id}.png"
         
         # Plot the circuit diagram
+        print(f"DEBUG: About to plot circuit diagram with time_value=1.0, circuit_type={circuit_type}_t1")
         fig_path = plot_circuit_diagram(
             bound_circuit, 
             time_value=1.0,
