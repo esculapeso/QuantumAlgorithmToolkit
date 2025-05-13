@@ -291,12 +291,12 @@
                     : '<span class="badge bg-secondary">Not Detected</span>';
                 
                 // Update the view link
-                document.getElementById('preview-view-link').href = `/result/${resultName}`;
+                document.getElementById('preview-view-link').href = `/view_result/${resultName}`;
                 
                 // Fetch detailed info from the API
                 console.log(`Fetching data for simulation: ${resultName}`);
                 
-                fetch(`/api/simulation/${resultName}`)
+                fetch(`/get_simulation_preview/${resultName}`)
                     .then(response => {
                         console.log(`API response status: ${response.status}`);
                         if (!response.ok) {
