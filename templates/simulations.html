@@ -242,3 +242,108 @@
     </div>
 </div>
 {% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Auto-refresh the page if there are simulations in progress
+        setTimeout(function() {
+            window.location.reload();
+        }, 30000); // Refresh every 30 seconds
+        
+        // Initialize preview functionality
+        initPreviewButtons();
+    });
+    
+    function initPreviewButtons() {
+        // Get all preview buttons
+        const previewButtons = document.querySelectorAll('.preview-btn');
+        const previewCard = document.getElementById('preview-card');
+        const closePreviewBtn = document.getElementById('close-preview');
+        
+        // Add click handler to each preview button
+        previewButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const resultName = this.dataset.resultName;
+                const circuit = this.dataset.circuit;
+                const qubits = this.dataset.qubits;
+                const timeCrystal = this.dataset.timeCrystal === 'true';
+                const comb = this.dataset.comb === 'true';
+                
+                // Show the preview card
+                previewCard.style.display = 'block';
+                
+                // Show loading state
+                document.getElementById('preview-loading').style.display = 'block';
+                document.getElementById('preview-content').style.display = 'none';
+                
+                // Set basic info from data attributes
+                document.getElementById('preview-circuit').textContent = circuit;
+                document.getElementById('preview-qubits').textContent = qubits;
+                document.getElementById('preview-time-crystal').innerHTML = timeCrystal 
+                    ? '<span class="badge bg-success">Detected</span>' 
+                    : '<span class="badge bg-secondary">Not Detected</span>';
+                document.getElementById('preview-comb').innerHTML = comb 
+                    ? '<span class="badge bg-success">Detected</span>' 
+                    : '<span class="badge bg-secondary">Not Detected</span>';
+                
+                // Update the view link
+                document.getElementById('preview-view-link').href = `/result/${resultName}`;
+                
+                // Fetch more detailed info from the API
+                fetch(`/api/simulation/${resultName}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`Error fetching simulation data: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        // Hide loading, show content
+                        document.getElementById('preview-loading').style.display = 'none';
+                        document.getElementById('preview-content').style.display = 'block';
+                        
+                        // Update title and subtitle
+                        document.getElementById('preview-title').textContent = `${data.circuit_type} Simulation`;
+                        document.getElementById('preview-subtitle').textContent = 
+                            `${data.qubits} qubits, ${data.time_points} time points | ${data.created_at}`;
+                        
+                        // Load figures if available
+                        const figuresContainer = document.getElementById('preview-figures');
+                        figuresContainer.innerHTML = '';
+                        
+                        if (data.figures && data.figures.length > 0) {
+                            data.figures.forEach(figure => {
+                                const figureElement = document.createElement('div');
+                                figureElement.className = 'text-center mb-3';
+                                figureElement.innerHTML = `
+                                    <img src="/result/${data.result_name}/figure/${figure}" 
+                                        alt="${figure}" class="img-fluid rounded"
+                                        style="max-height: 300px;">
+                                    <p class="text-muted small mt-1">${figure}</p>
+                                `;
+                                figuresContainer.appendChild(figureElement);
+                            });
+                        } else {
+                            figuresContainer.innerHTML = '<div class="alert alert-info">No figures available for preview.</div>';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading preview:', error);
+                        document.getElementById('preview-loading').style.display = 'none';
+                        document.getElementById('preview-content').style.display = 'block';
+                        document.getElementById('preview-figures').innerHTML = 
+                            `<div class="alert alert-danger">Error loading preview: ${error.message}</div>`;
+                    });
+            });
+        });
+        
+        // Add close handler
+        if (closePreviewBtn) {
+            closePreviewBtn.addEventListener('click', function() {
+                previewCard.style.display = 'none';
+            });
+        }
+    }
+</script>
+{% endblock %}

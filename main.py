@@ -381,14 +381,9 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
                     result_name = os.path.basename(results_path) if results_path else None
                     print(f"✓ Completed simulation {i+1}/{total_sets}: {result_name}")
                     
-                    # Double-check the database saving
+                    # Database saving is already handled in the simulation module
                     if result_name and not result.get('db_record'):
-                        try:
-                            # Ensure it's saved to the database
-                            db_record = save_simulation_to_db(result, result_name)
-                            print(f"Manually saved simulation to database with ID: {db_record.id}")
-                        except Exception as db_err:
-                            print(f"Warning: Could not save to database: {db_err}")
+                        print(f"Note: Simulation {result_name} may not have been saved to the database automatically.")
                 
             except Exception as e:
                 print(f"Error running simulation {i+1}/{total_sets}: {str(e)}")
@@ -567,14 +562,11 @@ def run_single_simulation(params):
             result_name = os.path.basename(results_path) if results_path else None
             print(f"Simulation completed successfully: {result_name}")
             
-            # Ensure the result is saved to the database
+            # Database saving is already handled in the simulation module,
+            # and additional attempts could cause duplicate key errors.
+            # If the simulation was saved properly, it will have a db_record attribute.
             if result_name and not result.get('db_record'):
-                try:
-                    # The simulation module should normally save to DB, but let's double-check
-                    db_record = save_simulation_to_db(result, result_name)
-                    print(f"Manually saved simulation to database with ID: {db_record.id}")
-                except Exception as db_err:
-                    print(f"Warning: Could not save to database: {db_err}")
+                print(f"Note: Simulation {result_name} may not have been saved to the database automatically.")
         
     except Exception as e:
         # If an error occurs, log it
