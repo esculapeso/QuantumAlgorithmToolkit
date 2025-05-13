@@ -714,6 +714,111 @@ def get_simulation_preview(result_name):
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
+@app.route('/simple_dashboard')
+def simple_dashboard():
+    """Simple dashboard view without JavaScript for troubleshooting."""
+    # Import needed modules
+    import glob
+    import os
+    import traceback
+    import datetime
+    import time
+    import json
+    
+    # Define a class to simulate database models for filesystem results
+    class FilesystemSimulation:
+        def __init__(self, result_name, circuit_type="unknown", qubits=3, time_points=100, 
+                     created_at=None, time_crystal_detected=False, comb_detected=False):
+            self.id = 0
+            self.result_name = result_name
+            self.circuit_type = circuit_type
+            self.qubits = qubits
+            self.time_points = time_points
+            self.created_at = created_at or datetime.datetime.now()
+            self.time_crystal_detected = time_crystal_detected
+            self.linear_combs_detected = comb_detected
+            self.log_combs_detected = False
+            self.results_path = os.path.join('results', result_name)
+    
+    simulations = []
+    
+    # Get results from filesystem
+    result_dirs = glob.glob('results/*')
+    result_dirs = sorted(result_dirs, key=os.path.getmtime, reverse=True)
+    
+    for result_dir in result_dirs[:20]:  # Limit to most recent 20
+        result_name = os.path.basename(result_dir)
+        
+        # Parse metadata from filename and directory
+        parts = result_name.split('_')
+        circuit_type = parts[0] if parts else "unknown"
+        
+        # Try to find qubits (look for pattern with q)
+        qubits = 3  # Default
+        for part in parts:
+            if part.endswith('q') and part[:-1].isdigit():
+                qubits = int(part[:-1])
+                break
+        
+        # Get creation time from directory
+        try:
+            mtime = os.path.getmtime(result_dir)
+            created_at = datetime.datetime.fromtimestamp(mtime)
+        except:
+            created_at = datetime.datetime.now()
+        
+        # Try to get more details from results.json if it exists
+        time_points = 100
+        time_crystal = False
+        comb_detected_flag = False
+        
+        results_json = os.path.join(result_dir, 'results.json')
+        if os.path.exists(results_json):
+            try:
+                with open(results_json, 'r') as f:
+                    data = json.load(f)
+                
+                params = data.get('parameters', {})
+                analysis = data.get('analysis', {})
+                
+                time_points = params.get('time_points', 100)
+                time_crystal = analysis.get('has_subharmonics', False)
+                
+                # Get comb detection
+                fc_analysis = data.get('fc_analysis', {})
+                comb_analysis = data.get('comb_analysis', {})
+                log_comb_analysis = data.get('log_comb_analysis', {})
+                
+                comb_detected_flag = (
+                    comb_analysis.get('mx_comb_found', False) or 
+                    comb_analysis.get('mz_comb_found', False) or
+                    log_comb_analysis.get('mx_log_comb_found', False) or 
+                    log_comb_analysis.get('mz_log_comb_found', False)
+                )
+            except:
+                pass
+        
+        # Create a simulation object for this result
+        fs_sim = FilesystemSimulation(
+            result_name=result_name,
+            circuit_type=circuit_type,
+            qubits=qubits,
+            time_points=time_points,
+            created_at=created_at,
+            time_crystal_detected=time_crystal,
+            comb_detected=comb_detected_flag
+        )
+        
+        # Add to simulations list
+        simulations.append(fs_sim)
+    
+    # Log information about simulations found
+    print(f"Simple dashboard loaded {len(simulations)} simulations from filesystem")
+    for sim in simulations[:5]:  # Log first 5 for debugging
+        print(f"  - {sim.result_name} ({sim.circuit_type}, {sim.qubits} qubits)")
+    
+    return render_template('simple_dashboard.html', simulations=simulations)
+
 @app.route('/dashboard')
 def dashboard():
     """Dashboard view with simulations list and preview panel side by side."""
@@ -879,6 +984,11 @@ def dashboard():
     
     # Keep recent_results for legacy code support
     recent_results = [os.path.basename(d) for d in result_dirs[:10]]
+    
+    # Log information about simulations found
+    print(f"Dashboard loaded {len(simulations)} simulations")
+    for sim in simulations[:5]:  # Log first 5 for debugging
+        print(f"  - {sim.result_name} ({sim.circuit_type}, {sim.qubits} qubits)")
     
     # These variables are already defined at the start of the function
     
