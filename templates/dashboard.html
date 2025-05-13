@@ -21,6 +21,9 @@
         <div class="card shadow-sm mb-4" id="preview-card">
             <div class="card-header bg-primary-subtle d-flex justify-content-between align-items-center">
                 <h5 class="card-title mb-0">Simulation Results</h5>
+                <span id="preview-star" class="star-toggle" style="cursor: pointer; display: none;">
+                    <i class="star-icon bi bi-star text-secondary"></i>
+                </span>
             </div>
             <div class="card-body">
                 <div id="preview-loading" class="text-center py-5" style="display: block;">
@@ -157,6 +160,14 @@
                         </div>
                     </div>
                     
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="is_starred" id="is_starred" value="true"
+                                  {% if filter_is_starred %}checked{% endif %}>
+                            <label class="form-check-label" for="is_starred">Starred Only</label>
+                        </div>
+                    </div>
+                    
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-primary">Search</button>
                         <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Reset</a>
@@ -180,7 +191,8 @@
                                 data-circuit="{{ sim.circuit_type }}"
                                 data-qubits="{{ sim.qubits }}"
                                 data-time-crystal="{{ sim.time_crystal_detected|lower }}"
-                                data-comb="{{ (sim.linear_combs_detected or sim.log_combs_detected)|lower }}">
+                                data-comb="{{ (sim.linear_combs_detected or sim.log_combs_detected)|lower }}"
+                                data-starred="{{ sim.is_starred|default(false)|lower }}">
                             <div>
                                 <div class="d-flex w-100 justify-content-between">
                                     <h6 class="mb-1">{{ sim.circuit_type }}</h6>
@@ -188,7 +200,14 @@
                                 </div>
                                 <div class="small text-muted">{{ sim.qubits }} qubits, {{ sim.time_points }} time points</div>
                             </div>
-                            <div>
+                            <div class="d-flex align-items-center">
+                                <span class="star-toggle me-2" data-result-name="{{ sim.result_name }}" style="cursor: pointer;">
+                                    {% if sim.is_starred %}
+                                        <i class="star-icon bi bi-star-fill text-warning"></i>
+                                    {% else %}
+                                        <i class="star-icon bi bi-star text-secondary"></i>
+                                    {% endif %}
+                                </span>
                                 {% if sim.time_crystal_detected %}
                                     <span class="badge bg-success rounded-pill">TC</span>
                                 {% endif %}
