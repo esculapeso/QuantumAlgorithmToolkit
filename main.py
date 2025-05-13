@@ -184,7 +184,8 @@ def index():
         {"id": "qft_basic", "name": "QFT Basic Circuit"},
         {"id": "comb_generator", "name": "Frequency Comb Generator"},
         {"id": "comb_twistor", "name": "Twistor-inspired Comb Circuit"},
-        {"id": "graphene_fc", "name": "Graphene Lattice Circuit"}
+        {"id": "graphene_fc", "name": "Graphene Lattice Circuit"},
+        {"id": "string_twistor_fc", "name": "String Twistor Frequency Crystal"}
     ]
     
     return render_template('index.html', 
@@ -205,7 +206,8 @@ def parameter_sweep():
         {"id": "qft_basic", "name": "QFT Basic Circuit"},
         {"id": "comb_generator", "name": "Frequency Comb Generator"},
         {"id": "comb_twistor", "name": "Twistor-inspired Comb Circuit"},
-        {"id": "graphene_fc", "name": "Graphene Lattice Circuit"}
+        {"id": "graphene_fc", "name": "Graphene Lattice Circuit"},
+        {"id": "string_twistor_fc", "name": "String Twistor Frequency Crystal"}
     ]
     
     # Current timestamp for default scan name
