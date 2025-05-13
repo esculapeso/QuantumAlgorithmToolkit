@@ -87,29 +87,83 @@ def save_peaks(simulation_id, analysis, fc_analysis):
         # Get information about harmonics
         harmonic_indices = analysis.get(f'{component}_harmonic_indices', [])
         
+        # Convert numpy types to Python native types
+        peaks = [convert_numpy_type(p) for p in peaks]
+        amps = [convert_numpy_type(a) for a in amps]
+        phases = [convert_numpy_type(p) for p in phases]
+        incommensurate_freqs = [convert_numpy_type(f) for f in incommensurate_freqs]
+        harmonic_indices = [convert_numpy_type(i) for i in harmonic_indices]
+        
         for i, freq in enumerate(peaks):
             # Only store peaks with significant amplitude
-            if i < len(amps) and amps[i] > 0.01:
-                phase = phases[i] if i < len(phases) else 0.0
+            if i < len(amps):
+                # Convert to float to ensure comparison works
+                amp_val = float(amps[i])
+                if amp_val > 0.01:
+                    phase = phases[i] if i < len(phases) else 0.0
                 
-                # Check if this frequency is incommensurate
-                is_incomm = freq in incommensurate_freqs
-                
-                # Check if this frequency is a harmonic
-                is_harmonic = i in harmonic_indices
-                
-                # Create peak record
-                peak = FrequencyPeak()
-                peak.simulation_id = simulation_id
-                peak.frequency = freq
-                peak.amplitude = amps[i]
-                peak.phase = phase
-                peak.component = component
-                peak.is_harmonic = is_harmonic
-                peak.is_incommensurate = is_incomm
-                db.session.add(peak)
+                    # Check if this frequency is incommensurate
+                    is_incomm = freq in incommensurate_freqs
+                    
+                    # Check if this frequency is a harmonic
+                    is_harmonic = i in harmonic_indices
+                    
+                    # Create peak record
+                    peak = FrequencyPeak()
+                    peak.simulation_id = simulation_id
+                    peak.frequency = freq
+                    peak.amplitude = amp_val  # Use the converted amplitude value
+                    peak.phase = phase
+                    peak.component = component
+                    peak.is_harmonic = is_harmonic
+                    peak.is_incommensurate = is_incomm
+                    db.session.add(peak)
     
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception as e:
+        print(f"Error saving peaks to database: {e}")
+        db.session.rollback()
+
+def convert_numpy_type(value):
+    """
+    Convert numpy types to Python native types for database compatibility.
+    
+    Args:
+        value: The value to convert
+        
+    Returns:
+        The converted value as a Python native type
+    """
+    # Import numpy only if needed to avoid dependency issues
+    try:
+        import numpy as np
+        
+        # Check if value is a numpy integer type
+        if hasattr(np, 'integer') and isinstance(value, np.integer):
+            return int(value)
+        
+        # Check if value is a numpy floating point type
+        if hasattr(np, 'floating') and isinstance(value, np.floating):
+            return float(value)
+        
+        # Check if value is a numpy array
+        if hasattr(np, 'ndarray') and isinstance(value, np.ndarray):
+            return value.tolist()
+        
+        # Check if value is a numpy boolean
+        if hasattr(np, 'bool_') and isinstance(value, np.bool_):
+            return bool(value)
+        
+        # Special case for numpy scalar types
+        if str(type(value)).startswith("<class 'numpy."):
+            return value.item() if hasattr(value, 'item') else value
+            
+    except (ImportError, AttributeError):
+        pass
+    
+    # If it's not a numpy type or numpy isn't available, return as is
+    return value
 
 def save_combs(simulation_id, comb_analysis, log_comb_analysis):
     """Save detected frequency comb structures to the database."""
@@ -121,9 +175,16 @@ def save_combs(simulation_id, comb_analysis, log_comb_analysis):
             comb.simulation_id = simulation_id
             comb.component = component
             comb.is_logarithmic = False
-            comb.base_frequency = comb_analysis.get(f'{component}_base_freq', 0.0)
-            comb.spacing = comb_analysis.get(f'{component}_best_omega', 0.0)
-            comb.num_teeth = comb_analysis.get(f'{component}_num_teeth', 0)
+            
+            # Convert numpy types to Python native types
+            base_freq = convert_numpy_type(comb_analysis.get(f'{component}_base_freq', 0.0))
+            spacing = convert_numpy_type(comb_analysis.get(f'{component}_best_omega', 0.0))
+            num_teeth = convert_numpy_type(comb_analysis.get(f'{component}_num_teeth', 0))
+            
+            comb.base_frequency = base_freq
+            comb.spacing = spacing
+            comb.num_teeth = num_teeth
+            
             db.session.add(comb)
     
     # Process logarithmic combs
@@ -134,12 +195,23 @@ def save_combs(simulation_id, comb_analysis, log_comb_analysis):
             log_comb.simulation_id = simulation_id
             log_comb.component = component
             log_comb.is_logarithmic = True
-            log_comb.base_frequency = log_comb_analysis.get(f'{component}_base_freq', 0.0)
-            log_comb.spacing = log_comb_analysis.get(f'{component}_best_r', 0.0)
-            log_comb.num_teeth = log_comb_analysis.get(f'{component}_log_num_teeth', 0)
+            
+            # Convert numpy types to Python native types
+            base_freq = convert_numpy_type(log_comb_analysis.get(f'{component}_base_freq', 0.0))
+            spacing = convert_numpy_type(log_comb_analysis.get(f'{component}_best_r', 0.0))
+            num_teeth = convert_numpy_type(log_comb_analysis.get(f'{component}_log_num_teeth', 0))
+            
+            log_comb.base_frequency = base_freq
+            log_comb.spacing = spacing
+            log_comb.num_teeth = num_teeth
+            
             db.session.add(log_comb)
     
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception as e:
+        print(f"Error saving combs to database: {e}")
+        db.session.rollback()
 
 def get_recent_simulations(limit=10):
     """Get the most recent simulation results from the database."""
