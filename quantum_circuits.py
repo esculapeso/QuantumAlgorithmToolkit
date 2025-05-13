@@ -305,6 +305,123 @@ def create_graphene_fc_circuit(qubits, shots, drive_steps, init_state=None, driv
     
     return qc, t
 
+def create_string_twistor_fc_circuit(qubits, shots, drive_steps, init_state=None, drive_param=0.9):
+    """
+    Creates a circuit inspired by string twistor theory for frequency crystal generation.
+    
+    This implementation is based on the theoretical framework of perturbative gauge theory,
+    string theory, and twistor space described in Habdank-Woje's paper on String Twistor
+    Frequency Crystals. It aims to create quantum states that exhibit temporal periodicity
+    analogous to the holomorphic curves in twistor space.
+    
+    Args:
+        qubits: Number of qubits
+        shots: Number of measurement shots
+        drive_steps: Number of drive sequence repetitions
+        init_state: Initial state of the qubits
+        drive_param: Parameter controlling the drive strength
+        
+    Returns:
+        Quantum circuit and time parameter
+    """
+    if qubits < 4:
+        print(f"Warning: String Twistor circuit works best with at least 4 qubits. Using {qubits} qubits.")
+    
+    # Create circuit
+    qc = QuantumCircuit(qubits)
+    
+    # Initialize with custom state if provided
+    if init_state is not None:
+        if isinstance(init_state, str):
+            if init_state == 'superposition':
+                for q in range(qubits):
+                    qc.h(q)
+            elif init_state.startswith('|') and init_state.endswith('>'):
+                # Parse state like |01+->
+                state_spec = init_state[1:-1]
+                if len(state_spec) != qubits:
+                    raise ValueError(f"Initial state {init_state} doesn't match qubit count {qubits}")
+                for q, state_char in enumerate(state_spec):
+                    if state_char == '1':
+                        qc.x(q)
+                    elif state_char == '+':
+                        qc.h(q)
+                    elif state_char == '-':
+                        qc.x(q)
+                        qc.h(q)
+    else:
+        # Default to superposition
+        for q in range(qubits):
+            qc.h(q)
+    
+    # Define time parameter
+    t = Parameter('t')
+    
+    # Implement twistor space encoding through parameterized gates
+    # We'll use a spinor-inspired encoding pattern
+    for step in range(drive_steps):
+        # Base angle modulated by the time parameter
+        angle = t * drive_param
+        
+        # First layer: Spinor-inspired rotations
+        for q in range(qubits):
+            # Complex phase factor inspired by twistor geometry
+            # Using modulation based on the position and step
+            phase_factor = np.pi * (q + 1) / (qubits * (step % 3 + 1))
+            qc.rx(angle * phase_factor, q)
+            
+            # Z-rotation with complementary phase
+            qc.rz(angle * (1 - phase_factor), q)
+        
+        # Second layer: Holomorphic curve-inspired entanglement pattern
+        # In twistor theory, certain algebraic curves correspond to MHV amplitudes
+        for i in range(qubits - 1):
+            # Create entanglement patterns that mimic holomorphic curves
+            # with controlled-Z gates following a modulated pattern
+            if step % 2 == 0:
+                # Even steps: linear entanglement
+                qc.cz(i, i + 1)
+            else:
+                # Odd steps: non-local entanglement
+                qc.cz(i, (i + qubits // 2) % qubits)
+        
+        # Third layer: String-inspired multi-qubit interactions
+        # Implement a controlled rotation that simulates string modes
+        for q in range(qubits):
+            # Central qubit as control
+            control = qubits // 2
+            
+            # Skip self-control
+            if q == control:
+                continue
+                
+            # Controlled rotation with phase dependent on distance
+            distance = abs(q - control)
+            phase = angle * np.exp(-distance / (qubits/2))
+            
+            if step % 3 == 0:
+                qc.crx(phase, control, q)
+            elif step % 3 == 1:
+                qc.cry(phase, control, q)
+            else:
+                qc.crz(phase, control, q)
+        
+        # Fourth layer: Temporal frequency crystal encoding
+        # Add phase shifts with frequencies that create temporal crystal patterns
+        for q in range(qubits):
+            # Add a phase that depends on both qubit position and drive step
+            # This creates an interference pattern in time, essential for frequency crystals
+            harmonic_phase = angle * (q + 1) * (step + 1) / (qubits * drive_steps)
+            qc.p(harmonic_phase, q)
+            
+        # Final layer: Global phase coherence
+        # Ensure global phase coherence across qubits
+        for q in range(qubits):
+            if q < qubits - 1:
+                qc.cx(q, (q + 1) % qubits)
+    
+    return qc, t
+
 def get_circuit_generator(circuit_type):
     """Returns the appropriate circuit generator function based on the circuit type."""
     circuit_generators = {
@@ -312,7 +429,8 @@ def get_circuit_generator(circuit_type):
         'qft_basic': create_qft_basic_circuit,
         'comb_generator': create_comb_generator_circuit,
         'comb_twistor': create_comb_twistor_circuit,
-        'graphene_fc': create_graphene_fc_circuit
+        'graphene_fc': create_graphene_fc_circuit,
+        'string_twistor_fc': create_string_twistor_fc_circuit
     }
     
     if circuit_type not in circuit_generators:
