@@ -409,7 +409,7 @@ def run_simulation():
     try:
         # Extract parameters from form
         circuit_type = request.form.get('circuit_type')
-        qubits = int(request.form.get('qubits', 3))
+        qubits = int(request.form.get('qubits', 8))
         shots = int(request.form.get('shots', 8192))
         drive_steps = int(request.form.get('drive_steps', 5))
         time_points = int(request.form.get('time_points', 100))
