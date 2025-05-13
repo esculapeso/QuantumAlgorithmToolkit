@@ -576,15 +576,31 @@ def run_single_simulation(params):
         print(error_traceback)  # Print full traceback for debugging
 
 @app.route('/api/simulation/<result_name>')
+@app.route('/get_simulation_preview/<result_name>')
 def get_simulation_preview(result_name):
     """Get a simulation data for AJAX requests in the dashboard."""
     try:
         import glob  # Import here for file searching
         import datetime
         import re
+        import traceback
+        import os
         from db_utils import get_simulation_by_name
         
         print(f"API request for simulation: {result_name}")
+        
+        # Debug info
+        print("Available routes:")
+        for rule in app.url_map.iter_rules():
+            print(f"  {rule.endpoint}: {rule.rule}")
+        
+        # Check if the result exists in the filesystem
+        result_path = os.path.join('results', result_name)
+        print(f"Checking if result path exists: {result_path}")
+        if os.path.exists(result_path):
+            print(f"Result directory exists: {result_path}")
+        else:
+            print(f"Result directory does not exist: {result_path}")
         
         # Get simulation from database
         simulation = get_simulation_by_name(result_name)
@@ -710,9 +726,18 @@ def get_simulation_preview(result_name):
         return jsonify(response_data)
             
     except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
         print(f"Error getting simulation preview: {str(e)}")
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        print(error_traceback)
+        
+        # Return a more helpful error response with full details
+        return jsonify({
+            "error": str(e),
+            "message": "Failed to load simulation data",
+            "result_name": result_name,
+            "traceback": error_traceback.split('\n')
+        }), 500
 
 @app.route('/simple_dashboard')
 def simple_dashboard():
