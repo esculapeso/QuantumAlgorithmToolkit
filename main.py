@@ -580,6 +580,8 @@ def get_simulation_preview(result_name):
     """Get a simulation data for AJAX requests in the dashboard."""
     try:
         import glob  # Import here for file searching
+        import datetime
+        import re
         from db_utils import get_simulation_by_name
         
         print(f"API request for simulation: {result_name}")
@@ -587,13 +589,89 @@ def get_simulation_preview(result_name):
         # Get simulation from database
         simulation = get_simulation_by_name(result_name)
         
-        if not simulation:
-            print(f"Simulation not found: {result_name}")
-            return jsonify({"error": "Simulation not found"}), 404
-        
-        # Get list of figure files
+        # Get list of figure files and result path
         figure_files = []
-        result_path = simulation.results_path
+        
+        # Simulation found in database
+        if simulation:
+            print(f"Simulation found in database: {result_name}")
+            result_path = simulation.results_path
+            
+            # Extract simulation metadata from database
+            circuit_type = simulation.circuit_type
+            qubits = simulation.qubits
+            time_points = simulation.time_points
+            time_crystal_detected = simulation.time_crystal_detected
+            comb_detected = simulation.linear_combs_detected or simulation.log_combs_detected
+            created_at = simulation.created_at.strftime('%Y-%m-%d %H:%M')
+            sim_id = simulation.id
+            
+        # Simulation not in database, try to load from filesystem
+        else:
+            print(f"Simulation not found in database, checking filesystem: {result_name}")
+            
+            # Assume the result_name is a directory in the results folder
+            result_path = os.path.join('results', result_name)
+            
+            if not os.path.exists(result_path):
+                print(f"Simulation directory not found: {result_path}")
+                return jsonify({"error": "Simulation not found"}), 404
+                
+            # Try to extract information from the result_name
+            # Format is typically: circuit_type_...._NNq_timestamp
+            parts = result_name.split('_')
+            
+            # Extract circuit type (first part)
+            circuit_type = parts[0]
+            
+            # Try to find qubits (look for pattern with q)
+            qubits = 3  # Default if we can't extract it
+            for part in parts:
+                if part.endswith('q') and part[:-1].isdigit():
+                    qubits = int(part[:-1])
+                    break
+            
+            # Get timestamp from the filename as the creation date
+            timestamp_str = result_name.split('_')[-1]
+            try:
+                created_at = datetime.datetime.strptime(timestamp_str, '%Y%m%d-%H%M%S').strftime('%Y-%m-%d %H:%M')
+            except ValueError:
+                created_at = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+            
+            # Default values for other metadata
+            time_points = 100
+            time_crystal_detected = False
+            comb_detected = False
+            sim_id = 0
+            
+            # Try to parse from files if they exist
+            results_json = os.path.join(result_path, 'results.json')
+            if os.path.exists(results_json):
+                try:
+                    import json
+                    with open(results_json, 'r') as f:
+                        data = json.load(f)
+                        
+                    # Extract data if available
+                    params = data.get('parameters', {})
+                    analysis = data.get('analysis', {})
+                    
+                    time_points = params.get('time_points', 100)
+                    time_crystal_detected = analysis.get('has_subharmonics', False)
+                    
+                    # Extract comb detection if available
+                    fc_analysis = data.get('fc_analysis', {})
+                    comb_analysis = data.get('comb_analysis', {})
+                    log_comb_analysis = data.get('log_comb_analysis', {})
+                    
+                    comb_detected = (
+                        comb_analysis.get('mx_comb_found', False) or 
+                        comb_analysis.get('mz_comb_found', False) or
+                        log_comb_analysis.get('mx_log_comb_found', False) or 
+                        log_comb_analysis.get('mz_log_comb_found', False)
+                    )
+                except Exception as e:
+                    print(f"Error parsing results.json: {e}")
         
         print(f"Looking for figures in: {result_path}")
         
@@ -617,18 +695,18 @@ def get_simulation_preview(result_name):
             
         # Return simulation data with all figures
         response_data = {
-            "id": simulation.id,
-            "result_name": simulation.result_name,
-            "circuit_type": simulation.circuit_type, 
-            "qubits": simulation.qubits,
-            "time_points": simulation.time_points,
-            "time_crystal_detected": simulation.time_crystal_detected,
-            "comb_detected": simulation.linear_combs_detected or simulation.log_combs_detected,
-            "created_at": simulation.created_at.strftime('%Y-%m-%d %H:%M'),
+            "id": sim_id,
+            "result_name": result_name,
+            "circuit_type": circuit_type, 
+            "qubits": qubits,
+            "time_points": time_points,
+            "time_crystal_detected": time_crystal_detected,
+            "comb_detected": comb_detected,
+            "created_at": created_at,
             "figures": preview_figures
         }
         
-        print(f"Returning data for simulation: {simulation.result_name}")
+        print(f"Returning data for simulation: {result_name}")
         return jsonify(response_data)
             
     except Exception as e:
@@ -643,6 +721,9 @@ def dashboard():
     import glob
     import os
     import traceback  # Add traceback for error logging
+    import datetime
+    import time
+    import json
     
     # Initialize variables outside the try block to ensure they're always defined
     circuit_type = request.args.get('circuit_type', '')
@@ -652,6 +733,21 @@ def dashboard():
     comb_detected = request.args.get('comb_detected') == 'true'
     simulations = []
     db_error = None
+    
+    # Define a class to simulate database models for filesystem results
+    class FilesystemSimulation:
+        def __init__(self, result_name, circuit_type="unknown", qubits=3, time_points=100, 
+                     created_at=None, time_crystal_detected=False, comb_detected=False):
+            self.id = 0
+            self.result_name = result_name
+            self.circuit_type = circuit_type
+            self.qubits = qubits
+            self.time_points = time_points
+            self.created_at = created_at or datetime.datetime.now()
+            self.time_crystal_detected = time_crystal_detected
+            self.linear_combs_detected = comb_detected
+            self.log_combs_detected = False
+            self.results_path = os.path.join('results', result_name)
     
     try:
         from db_utils import search_simulations
@@ -663,7 +759,7 @@ def dashboard():
             comb_detected = None
         
         # Search simulations using filters
-        simulations = search_simulations(
+        db_simulations = search_simulations(
             circuit_type=circuit_type if circuit_type else None,
             min_qubits=min_qubits,
             max_qubits=max_qubits,
@@ -671,14 +767,106 @@ def dashboard():
             comb_detected=comb_detected
         )
         
-        # Sort by newest first
-        simulations = sorted(simulations, key=lambda x: x.created_at, reverse=True)
+        # Start with database simulations
+        simulations = db_simulations
         
     except Exception as e:
-        import traceback
         traceback.print_exc()
         simulations = []
         db_error = str(e)
+    
+    # Always check filesystem for recent results, especially those not in the database
+    result_dirs = glob.glob('results/*')
+    result_dirs = sorted(result_dirs, key=os.path.getmtime, reverse=True)
+    
+    # Get existing result names from database to avoid duplicates
+    db_result_names = {sim.result_name for sim in simulations}
+    
+    # Process filesystem results and add them if not already in the database
+    for result_dir in result_dirs[:20]:  # Limit to most recent 20
+        result_name = os.path.basename(result_dir)
+        
+        # Skip if already in database results
+        if result_name in db_result_names:
+            continue
+        
+        # Parse metadata from filename and directory
+        parts = result_name.split('_')
+        circuit_type = parts[0] if parts else "unknown"
+        
+        # Try to find qubits (look for pattern with q)
+        qubits = 3  # Default
+        for part in parts:
+            if part.endswith('q') and part[:-1].isdigit():
+                qubits = int(part[:-1])
+                break
+        
+        # Get creation time from directory
+        try:
+            mtime = os.path.getmtime(result_dir)
+            created_at = datetime.datetime.fromtimestamp(mtime)
+        except:
+            created_at = datetime.datetime.now()
+        
+        # Try to get more details from results.json if it exists
+        time_points = 100
+        time_crystal = False
+        comb_detected_flag = False
+        
+        results_json = os.path.join(result_dir, 'results.json')
+        if os.path.exists(results_json):
+            try:
+                with open(results_json, 'r') as f:
+                    data = json.load(f)
+                
+                params = data.get('parameters', {})
+                analysis = data.get('analysis', {})
+                
+                time_points = params.get('time_points', 100)
+                time_crystal = analysis.get('has_subharmonics', False)
+                
+                # Get comb detection
+                fc_analysis = data.get('fc_analysis', {})
+                comb_analysis = data.get('comb_analysis', {})
+                log_comb_analysis = data.get('log_comb_analysis', {})
+                
+                comb_detected_flag = (
+                    comb_analysis.get('mx_comb_found', False) or 
+                    comb_analysis.get('mz_comb_found', False) or
+                    log_comb_analysis.get('mx_log_comb_found', False) or 
+                    log_comb_analysis.get('mz_log_comb_found', False)
+                )
+            except:
+                pass
+        
+        # Apply filters if needed
+        if circuit_type and circuit_type != circuit_type:
+            continue
+        if min_qubits is not None and qubits < min_qubits:
+            continue
+        if max_qubits is not None and qubits > max_qubits:
+            continue
+        if time_crystal_detected is not None and time_crystal != time_crystal_detected:
+            continue
+        if comb_detected is not None and comb_detected_flag != comb_detected:
+            continue
+        
+        # Create a simulation object for this result
+        fs_sim = FilesystemSimulation(
+            result_name=result_name,
+            circuit_type=circuit_type,
+            qubits=qubits,
+            time_points=time_points,
+            created_at=created_at,
+            time_crystal_detected=time_crystal,
+            comb_detected=comb_detected_flag
+        )
+        
+        # Add to simulations list
+        simulations.append(fs_sim)
+    
+    # Sort all simulations by creation date (newest first)
+    simulations = sorted(simulations, key=lambda x: x.created_at, reverse=True)
     
     # Get list of circuit types for filter dropdown
     circuit_types = [
@@ -689,12 +877,8 @@ def dashboard():
         {"id": "graphene_fc", "name": "Graphene FC"},
     ]
     
-    # Attempt to get recent results from file system if database fails
-    recent_results = []
-    if db_error:
-        # Try to get results from file system as fallback
-        result_dirs = glob.glob('results/*')
-        recent_results = [os.path.basename(d) for d in sorted(result_dirs, key=os.path.getmtime, reverse=True)[:10]]
+    # Keep recent_results for legacy code support
+    recent_results = [os.path.basename(d) for d in result_dirs[:10]]
     
     # These variables are already defined at the start of the function
     
