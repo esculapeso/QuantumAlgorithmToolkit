@@ -241,11 +241,102 @@
 
 {% block scripts %}
 <script>
+    // Function to toggle the star status of a simulation
+    function toggleStar(resultName, starElement) {
+        // Send an AJAX request to toggle the star status
+        fetch(`/api/simulation/${resultName}/toggle_star`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Error toggling star status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Star toggled:', data);
+            
+            // Update the star icon based on the returned status
+            if (data.is_starred) {
+                // If starred, use filled star icon
+                starElement.querySelector('.star-icon').classList.remove('bi-star');
+                starElement.querySelector('.star-icon').classList.remove('text-secondary');
+                starElement.querySelector('.star-icon').classList.add('bi-star-fill');
+                starElement.querySelector('.star-icon').classList.add('text-warning');
+            } else {
+                // If not starred, use empty star icon
+                starElement.querySelector('.star-icon').classList.remove('bi-star-fill');
+                starElement.querySelector('.star-icon').classList.remove('text-warning');
+                starElement.querySelector('.star-icon').classList.add('bi-star');
+                starElement.querySelector('.star-icon').classList.add('text-secondary');
+            }
+            
+            // If this is the preview star and a list item is selected, update that too
+            if (starElement.id === 'preview-star') {
+                const activeItem = document.querySelector('.simulation-item.active');
+                if (activeItem && activeItem.dataset.resultName === resultName) {
+                    const listStarElement = activeItem.querySelector('.star-toggle');
+                    if (listStarElement) {
+                        if (data.is_starred) {
+                            listStarElement.querySelector('.star-icon').classList.remove('bi-star');
+                            listStarElement.querySelector('.star-icon').classList.remove('text-secondary');
+                            listStarElement.querySelector('.star-icon').classList.add('bi-star-fill');
+                            listStarElement.querySelector('.star-icon').classList.add('text-warning');
+                        } else {
+                            listStarElement.querySelector('.star-icon').classList.remove('bi-star-fill');
+                            listStarElement.querySelector('.star-icon').classList.remove('text-warning');
+                            listStarElement.querySelector('.star-icon').classList.add('bi-star');
+                            listStarElement.querySelector('.star-icon').classList.add('text-secondary');
+                        }
+                    }
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error toggling star:', error);
+            alert('Error toggling star status.');
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         console.log('Dashboard loaded');
         
         // Initialize simulation item click events
         initSimulationItems();
+        
+        // Add event handlers for star toggling
+        document.querySelectorAll('.star-toggle').forEach(star => {
+            star.addEventListener('click', function(event) {
+                // Prevent the click from triggering the parent button
+                event.stopPropagation();
+                
+                // Get the result name from the data attribute or from the parent
+                const resultName = this.dataset.resultName || 
+                                  this.closest('.simulation-item')?.dataset.resultName ||
+                                  document.querySelector('.simulation-item.active')?.dataset.resultName;
+                
+                if (resultName) {
+                    toggleStar(resultName, this);
+                } else {
+                    console.error('No result name found for star toggle');
+                }
+            });
+        });
+        
+        // Handle preview star click
+        const previewStar = document.getElementById('preview-star');
+        if (previewStar) {
+            previewStar.addEventListener('click', function(event) {
+                const activeItem = document.querySelector('.simulation-item.active');
+                if (activeItem) {
+                    const resultName = activeItem.dataset.resultName;
+                    toggleStar(resultName, this);
+                }
+            });
+        }
         
         try {
             // Auto-show the first simulation if available
@@ -294,6 +385,7 @@
                 const qubits = this.dataset.qubits;
                 const timeCrystal = this.dataset.timeCrystal === 'true';
                 const comb = this.dataset.comb === 'true';
+                const isStarred = this.dataset.starred === 'true';
                 
                 // Show loading state
                 document.getElementById('preview-loading').style.display = 'block';
