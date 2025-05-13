@@ -1,0 +1,28 @@
+{
+  "potential_fc_peaks": [
+    {
+      "frequency": 1.16015625,
+      "amplitude": 0.07143019336110433,
+      "basis": "Mx",
+      "ratio_to_drive": 11.6015625,
+      "relation_guess": "non-harmonic",
+      "is_potentially_incommensurate": true
+    },
+    {
+      "frequency": 1.7789062500000001,
+      "amplitude": 0.07469841019603952,
+      "basis": "Mx",
+      "ratio_to_drive": 17.7890625,
+      "relation_guess": "~drive*338/19",
+      "is_potentially_incommensurate": false
+    },
+    {
+      "frequency": 2.3976562500000003,
+      "amplitude": 0.057273856647313034,
+      "basis": "Mx",
+      "ratio_to_drive": 23.9765625,
+      "relation_guess": "~drive*1031/43",
+      "is_potentially_incommensurate": false
+    }
+  ]
+}

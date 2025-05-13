@@ -301,6 +301,14 @@
         });
     }
 
+    // Global state to persist figure visibility between simulation selections
+    window.figureVisibilityState = {
+        'circuit_diagram': false,
+        'expectation_values': false,
+        'fft_analysis': true,  // Only FFT is visible by default
+        'comb_analysis': false
+    };
+    
     document.addEventListener('DOMContentLoaded', function() {
         console.log('Dashboard loaded');
         
@@ -549,28 +557,36 @@
                                 <div class="d-flex flex-wrap gap-3">
                                     <div class="form-check">
                                         <input class="form-check-input figure-toggle" type="checkbox" id="toggle-circuit" 
-                                               data-figure-type="circuit_diagram" ${!data.figures.some(f => f.includes('circuit_diagram')) ? 'disabled' : ''}>
+                                               data-figure-type="circuit_diagram" 
+                                               ${window.figureVisibilityState['circuit_diagram'] ? 'checked' : ''} 
+                                               ${!data.figures.some(f => f.includes('circuit_diagram')) ? 'disabled' : ''}>
                                         <label class="form-check-label" for="toggle-circuit">
                                             Circuit Diagram
                                         </label>
                                     </div>
                                     <div class="form-check">
                                         <input class="form-check-input figure-toggle" type="checkbox" id="toggle-expectation"
-                                               data-figure-type="expectation_values" ${!data.figures.some(f => f.includes('expectation_values')) ? 'disabled' : ''}>
+                                               data-figure-type="expectation_values" 
+                                               ${window.figureVisibilityState['expectation_values'] ? 'checked' : ''} 
+                                               ${!data.figures.some(f => f.includes('expectation_values')) ? 'disabled' : ''}>
                                         <label class="form-check-label" for="toggle-expectation">
                                             Expectation Values
                                         </label>
                                     </div>
                                     <div class="form-check">
-                                        <input class="form-check-input figure-toggle" type="checkbox" id="toggle-fft" checked
-                                               data-figure-type="fft_analysis" ${!data.figures.some(f => f.includes('fft_analysis')) ? 'disabled' : ''}>
+                                        <input class="form-check-input figure-toggle" type="checkbox" id="toggle-fft"
+                                               data-figure-type="fft_analysis" 
+                                               ${window.figureVisibilityState['fft_analysis'] ? 'checked' : ''} 
+                                               ${!data.figures.some(f => f.includes('fft_analysis')) ? 'disabled' : ''}>
                                         <label class="form-check-label" for="toggle-fft">
                                             FFT Analysis (Spectrum)
                                         </label>
                                     </div>
                                     <div class="form-check">
                                         <input class="form-check-input figure-toggle" type="checkbox" id="toggle-comb"
-                                               data-figure-type="comb_analysis" ${!data.figures.some(f => f.includes('comb_analysis')) ? 'disabled' : ''}>
+                                               data-figure-type="comb_analysis" 
+                                               ${window.figureVisibilityState['comb_analysis'] ? 'checked' : ''} 
+                                               ${!data.figures.some(f => f.includes('comb_analysis')) ? 'disabled' : ''}>
                                         <label class="form-check-label" for="toggle-comb">
                                             Comb Analysis
                                         </label>
@@ -595,8 +611,13 @@
                                 const isCombAnalysis = figure.includes('comb_analysis');
                                 const isFFTAnalysis = figure.includes('fft_analysis');
                                 
-                                // Only show FFT analysis by default
-                                if (!isFFTAnalysis) {
+                                // Set initial visibility based on persistent state
+                                if (
+                                    (isCircuitDiagram && !window.figureVisibilityState['circuit_diagram']) ||
+                                    (isExpectation && !window.figureVisibilityState['expectation_values']) ||
+                                    (isFFTAnalysis && !window.figureVisibilityState['fft_analysis']) ||
+                                    (isCombAnalysis && !window.figureVisibilityState['comb_analysis'])
+                                ) {
                                     figureEl.style.display = 'none';
                                 }
                                 
