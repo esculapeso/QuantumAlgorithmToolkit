@@ -253,6 +253,13 @@
         
         // Initialize preview functionality
         initPreviewButtons();
+        
+        // Auto-show the most recent simulation if available
+        const previewButtons = document.querySelectorAll('.preview-btn');
+        if (previewButtons.length > 0) {
+            // Trigger click on the first (most recent) simulation
+            previewButtons[0].click();
+        }
     });
     
     function initPreviewButtons() {
@@ -276,6 +283,9 @@
                 // Show loading state
                 document.getElementById('preview-loading').style.display = 'block';
                 document.getElementById('preview-content').style.display = 'none';
+                
+                // Scroll to the preview card
+                previewCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 
                 // Set basic info from data attributes
                 document.getElementById('preview-circuit').textContent = circuit;
