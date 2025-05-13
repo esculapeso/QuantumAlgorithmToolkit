@@ -583,6 +583,54 @@ def run_single_simulation(params):
         print(f"Simulation error: {str(e)}")
         print(error_traceback)  # Print full traceback for debugging
 
+@app.route('/api/simulation/<result_name>')
+def get_simulation_preview(result_name):
+    """Get a simplified preview of simulation for AJAX requests."""
+    try:
+        from db_utils import get_simulation_by_name
+        
+        # Get simulation from database
+        simulation = get_simulation_by_name(result_name)
+        
+        if not simulation:
+            return jsonify({"error": "Simulation not found"}), 404
+        
+        # Get list of figure files
+        figure_files = []
+        result_path = simulation.results_path
+        
+        # Check figures folder first
+        figure_path = os.path.join(result_path, 'figures')
+        if os.path.exists(figure_path):
+            png_files = sorted(glob.glob(os.path.join(figure_path, '*.png')))
+            figure_files = [os.path.basename(f) for f in png_files]
+        
+        # No figures in figures folder? Check main folder
+        if not figure_files and os.path.exists(result_path):
+            png_files = sorted(glob.glob(os.path.join(result_path, '*.png')))
+            figure_files = [os.path.basename(f) for f in png_files]
+            
+        # Limit to the first 2 figures for preview
+        preview_figures = figure_files[:2] if figure_files else []
+            
+        # Return simplified simulation data
+        return jsonify({
+            "id": simulation.id,
+            "result_name": simulation.result_name,
+            "circuit_type": simulation.circuit_type, 
+            "qubits": simulation.qubits,
+            "time_points": simulation.time_points,
+            "time_crystal_detected": simulation.time_crystal_detected,
+            "comb_detected": simulation.linear_combs_detected or simulation.log_combs_detected,
+            "created_at": simulation.created_at.strftime('%Y-%m-%d %H:%M'),
+            "figures": preview_figures
+        })
+            
+    except Exception as e:
+        print(f"Error getting simulation preview: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/simulations')
 def view_simulations():
     """View the status of all simulations."""
