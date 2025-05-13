@@ -315,10 +315,75 @@
                         document.getElementById('preview-title').textContent = `${data.circuit_type} Simulation`;
                         document.getElementById('preview-subtitle').textContent = 
                             `${data.qubits} qubits, ${data.time_points} time points | ${data.created_at}`;
+                            
+                        // Add a comprehensive details section before the figures
+                        const detailsHtml = `
+                            <div class="row mb-4">
+                                <div class="col-md-6">
+                                    <div class="card h-100">
+                                        <div class="card-header">
+                                            <h5 class="card-title mb-0">Simulation Parameters</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <table class="table table-sm">
+                                                <tbody>
+                                                    <tr>
+                                                        <th>Circuit Type</th>
+                                                        <td>${data.circuit_type}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <th>Qubits</th>
+                                                        <td>${data.qubits}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <th>Time Points</th>
+                                                        <td>${data.time_points}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <th>Created</th>
+                                                        <td>${data.created_at}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <th>Result Name</th>
+                                                        <td><small>${data.result_name}</small></td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card h-100">
+                                        <div class="card-header">
+                                            <h5 class="card-title mb-0">Analysis Results</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="d-flex flex-column gap-3">
+                                                <div>
+                                                    <h6>Time Crystal Detection</h6>
+                                                    ${data.time_crystal_detected ? 
+                                                        '<div class="alert alert-success py-2 px-3 mb-0"><i class="bi bi-check-circle-fill me-2"></i> Time crystal pattern detected</div>' : 
+                                                        '<div class="alert alert-secondary py-2 px-3 mb-0"><i class="bi bi-x-circle me-2"></i> No time crystal pattern detected</div>'}
+                                                </div>
+                                                <div>
+                                                    <h6>Frequency Comb Detection</h6>
+                                                    ${data.comb_detected ? 
+                                                        '<div class="alert alert-success py-2 px-3 mb-0"><i class="bi bi-check-circle-fill me-2"></i> Frequency comb structure detected</div>' : 
+                                                        '<div class="alert alert-secondary py-2 px-3 mb-0"><i class="bi bi-x-circle me-2"></i> No frequency comb structure detected</div>'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>`;
                         
-                        // Load all available figures
+                        // Get the figures container and add the details section
                         const figuresContainer = document.getElementById('preview-figures');
-                        figuresContainer.innerHTML = '';
+                        figuresContainer.innerHTML = detailsHtml;
+                        
+                        // Now add figures after the details section
+                        const figuresSection = document.createElement('div');
+                        figuresSection.className = 'figures-section';
                         
                         if (data.figures && data.figures.length > 0) {
                             console.log(`Loading ${data.figures.length} figures`);
@@ -327,13 +392,20 @@
                             data.figures.forEach(figure => {
                                 const figureElement = document.createElement('div');
                                 figureElement.className = 'text-center mb-4';
-                                figureElement.innerHTML = `
+                                // Create the image with error handling
+                                const imgHtml = `
                                     <img src="/figure/${data.result_name}/${figure}" 
                                         alt="${figure}" class="img-fluid rounded shadow-sm"
-                                        style="max-height: 400px;">
+                                        style="max-height: 400px;"
+                                        onerror="this.onerror=null; this.src=''; this.alt='Error loading image'; this.parentNode.classList.add('border', 'border-danger', 'p-3'); this.style.display='none'; console.error('Failed to load image: ' + this.src);">
                                     <p class="text-muted small mt-2">${figure}</p>
+                                    <div class="error-message d-none text-danger">Error loading image</div>
                                 `;
-                                figuresContainer.appendChild(figureElement);
+                                figureElement.innerHTML = imgHtml;
+                                
+                                // Add a console message to debug
+                                console.log(`Adding figure: /figure/${data.result_name}/${figure}`);
+                                figuresSection.appendChild(figureElement);
                             });
                         } else {
                             console.log('No figures found for this simulation');
