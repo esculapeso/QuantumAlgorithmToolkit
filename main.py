@@ -24,12 +24,16 @@ from simulation import run_parameter_scan, generate_parameter_grid
 from visualization import plot_circuit_diagram
 
 # Import Flask web application
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
 import glob
 import json
+from functools import wraps
 
 # Import database models
-from models import db, SimulationResult, FrequencyPeak, CombStructure
+from models import db, SimulationResult, FrequencyPeak, CombStructure, User
+
+# Import Flask-Login for user session management
+from flask_login import LoginManager, login_user, logout_user, current_user, login_required
 
 # Create Flask application
 app = Flask(__name__)
@@ -45,8 +49,39 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
 
 # Initialize the database
 db.init_app(app)
+
+# Initialize Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = 'Please log in to access this page.'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+# Admin role required decorator
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_admin():
+            flash('You need administrator privileges to access this page.', 'danger')
+            return redirect(url_for('login', next=request.url))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Create database tables and admin user if they don't exist
 with app.app_context():
     db.create_all()
+    
+    # Check if admin user exists, if not create it
+    admin = User.query.filter_by(username='admin').first()
+    if not admin:
+        admin = User(username='admin', role='admin')
+        admin.set_password('tjhw1951')
+        db.session.add(admin)
+        db.session.commit()
+        print("Admin user created successfully!")
 
 # Define a custom error handler for 500 errors
 @app.errorhandler(500)
@@ -119,6 +154,161 @@ def handle_exception(error):
     else:
         # For regular HTML routes, render an error template
         return render_template('error.html', error=str(error)), 500
+
+# User Authentication Routes
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """User login route."""
+    # If user is already logged in, redirect to homepage
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        remember = True if request.form.get('remember') else False
+        
+        # Check if user exists
+        user = User.query.filter_by(username=username).first()
+        
+        # Check password
+        if user and user.check_password(password):
+            login_user(user, remember=remember)
+            next_page = request.args.get('next')
+            
+            # Security check for next parameter to prevent open redirects
+            if next_page and not next_page.startswith('/'):
+                next_page = None
+                
+            return redirect(next_page or url_for('index'))
+        else:
+            flash('Please check your login details and try again.', 'danger')
+            
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    """User logout route."""
+    logout_user()
+    flash('You have been logged out.', 'success')
+    return redirect(url_for('login'))
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    """Register a new user."""
+    # If admin is creating a new user, they can stay logged in
+    # If not admin trying to access this page, they should login first
+    if not current_user.is_authenticated and not request.path == '/register':
+        return redirect(url_for('login'))
+    
+    # Only admins can create users unless no users exist yet
+    user_count = User.query.count()
+    if user_count > 0 and not (current_user.is_authenticated and current_user.is_admin()):
+        flash('You need administrator privileges to register new users.', 'danger')
+        return redirect(url_for('login'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        
+        # Default role is visitor unless admin is creating and specifies admin
+        role = 'visitor'
+        if current_user.is_authenticated and current_user.is_admin():
+            role = request.form.get('role', 'visitor')
+        
+        # Check if passwords match
+        if password != confirm_password:
+            flash('Passwords do not match.', 'danger')
+            return render_template('register.html')
+        
+        # Check if username already exists
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user:
+            flash('Username already exists.', 'danger')
+            return render_template('register.html')
+        
+        # Create new user
+        new_user = User(username=username, role=role)
+        new_user.set_password(password)
+        
+        db.session.add(new_user)
+        db.session.commit()
+        
+        flash('User registered successfully.', 'success')
+        return redirect(url_for('manage_users' if current_user.is_authenticated else 'login'))
+    
+    return render_template('register.html')
+
+@app.route('/users')
+@login_required
+@admin_required
+def manage_users():
+    """Manage users (admin only)."""
+    users = User.query.all()
+    return render_template('users.html', users=users)
+
+@app.route('/users/<int:user_id>/edit', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def edit_user(user_id):
+    """Edit a user (admin only)."""
+    user = User.query.get_or_404(user_id)
+    
+    # Don't allow editing the original admin account except by itself
+    if user.username == 'admin' and current_user.username != 'admin':
+        flash('You cannot edit the primary admin account.', 'danger')
+        return redirect(url_for('manage_users'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        role = request.form.get('role')
+        
+        # Check if username is being changed and already exists
+        if username != user.username:
+            existing_user = User.query.filter_by(username=username).first()
+            if existing_user:
+                flash('Username already exists.', 'danger')
+                return render_template('edit_user.html', user=user)
+        
+        # Update user
+        user.username = username
+        user.role = role
+        
+        # Update password if provided
+        if password:
+            user.set_password(password)
+        
+        db.session.commit()
+        flash('User updated successfully.', 'success')
+        return redirect(url_for('manage_users'))
+    
+    return render_template('edit_user.html', user=user)
+
+@app.route('/users/<int:user_id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def delete_user(user_id):
+    """Delete a user (admin only)."""
+    user = User.query.get_or_404(user_id)
+    
+    # Don't allow deleting the original admin account
+    if user.username == 'admin':
+        flash('You cannot delete the primary admin account.', 'danger')
+        return redirect(url_for('manage_users'))
+    
+    # Don't allow admins to delete themselves
+    if user.id == current_user.id:
+        flash('You cannot delete your own account.', 'danger')
+        return redirect(url_for('manage_users'))
+    
+    db.session.delete(user)
+    db.session.commit()
+    
+    flash('User deleted successfully.', 'success')
+    return redirect(url_for('manage_users'))
 
 @app.route('/')
 def index():

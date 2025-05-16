@@ -17,4 +17,10 @@ dependencies = [
     "qiskit>=2.0.0",
     "scipy>=1.15.3",
     "pylatexenc>=2.10",
+    "oauthlib>=3.2.2",
+    "pyjwt>=2.10.1",
+    "sqlalchemy>=2.0.40",
+    "flask-dance>=7.1.0",
+    "flask-login>=0.6.3",
+    "werkzeug>=3.1.3",
 ]
