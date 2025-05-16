@@ -1,7 +1,0 @@
-param_set,status,has_subharmonics,incommensurate_count,mx_comb_found,mx_comb_teeth,mz_comb_found,mz_comb_teeth,mx_log_comb_found,mz_log_comb_found,elapsed_time,param_ranges
-1,success,False,0,False,0,False,0,False,False,13.02038311958313,qubits
-2,success,False,0,False,0,False,0,False,False,12.682087659835815,shots
-3,success,False,0,False,0,False,0,False,False,13.635777473449707,drive_steps
-4,success,False,0,False,0,False,0,False,False,12.620167970657349,time_points
-5,success,False,0,False,0,False,0,False,False,11.78620719909668,max_time
-6,success,False,0,False,0,False,0,False,False,10.944852590560913,drive_param

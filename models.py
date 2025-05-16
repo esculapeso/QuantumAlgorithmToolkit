@@ -5,35 +5,8 @@ Contains SQLAlchemy models for storing simulation results.
 import datetime
 import json
 from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
-from flask_login import UserMixin
 
 db = SQLAlchemy()
-
-class User(UserMixin, db.Model):
-    """User account model."""
-    __tablename__ = 'users'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(100), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
-    role = db.Column(db.String(20), nullable=False, default="visitor")  # admin or visitor
-    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
-    
-    def set_password(self, password):
-        """Create hashed password."""
-        self.password_hash = generate_password_hash(password)
-    
-    def check_password(self, password):
-        """Check hashed password."""
-        return check_password_hash(self.password_hash, password)
-    
-    def is_admin(self):
-        """Check if user has admin role."""
-        return self.role == "admin"
-    
-    def __repr__(self):
-        return f'<User {self.username}>'
 
 class SimulationResult(db.Model):
     """Stores results from quantum simulations."""
@@ -127,59 +100,3 @@ class CombStructure(db.Model):
     def __repr__(self):
         comb_type = "Logarithmic" if self.is_logarithmic else "Linear"
         return f"<{comb_type}Comb {self.base_frequency:.4f}Hz+{self.spacing:.4f} in {self.component}>"
-
-
-class ParameterSweep(db.Model):
-    """Stores information about parameter sweeps."""
-    __tablename__ = 'parameter_sweeps'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    session_id = db.Column(db.String(255), unique=True, nullable=False, index=True)
-    name = db.Column(db.String(255), nullable=True)
-    circuit_type = db.Column(db.String(50), nullable=False)
-    
-    # Parameters being swept
-    param1_name = db.Column(db.String(50), nullable=True)
-    param2_name = db.Column(db.String(50), nullable=True)
-    
-    # Metadata
-    total_simulations = db.Column(db.Integer, default=0)
-    completed_simulations = db.Column(db.Integer, default=0)
-    status = db.Column(db.String(20), default="running")  # running, completed, failed
-    
-    # Timestamps
-    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
-    
-    # Relationships
-    simulations = db.relationship(
-        'SimulationResult',
-        primaryjoin="SimulationResult.sweep_session == ParameterSweep.session_id",
-        foreign_keys="SimulationResult.sweep_session",
-        backref=db.backref('parameter_sweep', uselist=False)
-    )
-    
-    def get_param_values(self):
-        """Get unique values for each parameter in this sweep."""
-        sims = SimulationResult.query.filter_by(sweep_session=self.session_id).all()
-        param1_values = sorted(list(set(sim.sweep_value1 for sim in sims if sim.sweep_value1 is not None)))
-        param2_values = sorted(list(set(sim.sweep_value2 for sim in sims if sim.sweep_value2 is not None)))
-        return param1_values, param2_values
-        
-    def update_completion_status(self):
-        """Update completion status based on simulations."""
-        sim_count = SimulationResult.query.filter_by(sweep_session=self.session_id).count()
-        self.completed_simulations = sim_count
-        if self.completed_simulations >= self.total_simulations and self.total_simulations > 0:
-            self.status = "completed"
-        db.session.commit()
-    
-    def __repr__(self):
-        param_info = []
-        if self.param1_name:
-            param_info.append(self.param1_name)
-        if self.param2_name:
-            param_info.append(self.param2_name)
-        param_str = ", ".join(param_info) if param_info else "No parameters"
-        
-        return f"<ParameterSweep '{self.session_id}': {self.circuit_type}, {param_str}, {self.completed_simulations}/{self.total_simulations}>"

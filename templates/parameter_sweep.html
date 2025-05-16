@@ -254,7 +254,7 @@
                                 <div class="mb-3">
                                     <label for="scan_name" class="form-label">Scan Name</label>
                                     <input type="text" class="form-control" id="scan_name" name="scan_name" 
-                                           value="parameter_scan_{{ default_time }}" required>
+                                           value="parameter_scan_{{ now.strftime('%Y%m%d') }}" required>
                                     <div class="form-text">A name to identify this parameter sweep</div>
                                 </div>
                             </div>
@@ -462,37 +462,12 @@
                 </button>
             </div>
             <div class="card-body p-0" id="sweep-sessions-container">
-                {% if completed_sweeps %}
-                    <ul class="list-group list-group-flush">
-                        {% for sweep in completed_sweeps %}
-                        <li class="list-group-item">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div>
-                                    <h6 class="mb-1">{{ sweep.circuit_type }}</h6>
-                                    <p class="small text-muted mb-1">{{ sweep.date }}</p>
-                                    <div>
-                                        {% if sweep.parameters %}
-                                        <span class="badge bg-info">{{ sweep.parameters }}</span>
-                                        {% endif %}
-                                        <span class="badge bg-secondary">{{ sweep.count }} simulations</span>
-                                    </div>
-                                </div>
-                                <a href="{{ url_for('view_sweep_grid', sweep_session=sweep.id) }}" 
-                                   class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-grid-3x3-gap"></i> View Results
-                                </a>
-                            </div>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                {% else %}
-                    <div class="text-center py-3" id="loading-indicator">
-                        <div class="spinner-border spinner-border-sm text-primary" role="status">
-                            <span class="visually-hidden">Loading sweep sessions...</span>
-                        </div>
-                        <span class="ms-2">Loading sweep sessions...</span>
+                <div class="text-center py-3" id="loading-indicator">
+                    <div class="spinner-border spinner-border-sm text-primary" role="status">
+                        <span class="visually-hidden">Loading sweep sessions...</span>
                     </div>
-                {% endif %}
+                    <span class="ms-2">Loading sweep sessions...</span>
+                </div>
             </div>
         </div>
     </div>
@@ -508,11 +483,14 @@
         // Set up auto-refresh for active sweep (if there is one)
         setupActiveSweepRefresh();
         
-        // Only set up refresh button for sweep sessions without disabling existing ones
+        // Load the list of sweep sessions
+        loadSweepSessions();
+        
+        // Set up refresh button
         const refreshBtn = document.getElementById('refresh-sweeps-btn');
         if (refreshBtn) {
             refreshBtn.addEventListener('click', function() {
-                window.location.reload(); // Simple reload to get fresh data
+                loadSweepSessions();
             });
         }
     });

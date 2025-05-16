@@ -1,29 +1,27 @@
 {% extends 'base.html' %}
 
-{% block title %}Error{% endblock %}
-
 {% block content %}
-<div class="container mt-5">
+<div class="container">
     <div class="row justify-content-center">
         <div class="col-md-8">
-            <div class="card shadow">
-                <div class="card-header bg-danger text-light">
-                    <h4 class="mb-0">Error</h4>
+            <div class="card shadow-sm">
+                <div class="card-header bg-danger-subtle">
+                    <h5 class="card-title mb-0">An Error Occurred</h5>
                 </div>
                 <div class="card-body">
-                    <div class="alert alert-danger">
-                        <h5><i class="bi bi-exclamation-triangle-fill me-2"></i> Something went wrong</h5>
-                        <p>{{ error }}</p>
-                    </div>
-                    <div class="d-grid gap-2">
-                        <a href="{{ url_for('index') }}" class="btn btn-primary">
-                            <i class="bi bi-house-door"></i> Return to Homepage
-                        </a>
-                        {% if not current_user.is_authenticated %}
-                        <a href="{{ url_for('login') }}" class="btn btn-outline-secondary">
-                            <i class="bi bi-box-arrow-in-right"></i> Login
-                        </a>
-                        {% endif %}
+                    <p class="card-text">{{ error }}</p>
+                    <p class="mt-4">
+                        <a href="/" class="btn btn-primary">Return to Home</a>
+                        <a href="/simulations" class="btn btn-outline-secondary ms-2">View Simulations</a>
+                    </p>
+                    
+                    <div class="alert alert-info mt-4">
+                        <h6>Troubleshooting Tips:</h6>
+                        <ul>
+                            <li>For simulations with many time points (>200), use the background processing option.</li>
+                            <li>Check the <a href="/simulations">Simulations</a> page to see if your simulation is still running in the background.</li>
+                            <li>If you're seeing timeout errors, try reducing the number of time points or qubits.</li>
+                        </ul>
                     </div>
                 </div>
             </div>

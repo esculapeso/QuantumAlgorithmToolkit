@@ -243,47 +243,6 @@ def get_simulation_by_name(result_name):
     """Get a simulation result by its result name."""
     return SimulationResult.query.filter_by(result_name=result_name).first()
 
-def find_existing_simulation(circuit_type, qubits, shots, drive_steps, time_points, max_time, drive_param, init_state):
-    """
-    Find an existing simulation with the exact same parameters.
-    
-    Args:
-        circuit_type (str): The circuit type
-        qubits (int): Number of qubits
-        shots (int): Number of shots
-        drive_steps (int): Number of drive steps
-        time_points (int): Number of time points
-        max_time (float): Maximum simulation time
-        drive_param (float): Drive parameter
-        init_state (str): Initial state
-        
-    Returns:
-        SimulationResult or None: Existing simulation if found, None otherwise
-    """
-    # Try to find a match with the exact parameters
-    return SimulationResult.query.filter_by(
-        circuit_type=circuit_type,
-        qubits=qubits,
-        shots=shots,
-        drive_steps=drive_steps,
-        time_points=time_points,
-        max_time=max_time,
-        drive_param=drive_param,
-        init_state=init_state
-    ).first()
-
-def get_sweep_simulations(sweep_session):
-    """
-    Get all simulations that are part of a specific sweep session.
-    
-    Args:
-        sweep_session (str): The sweep session ID
-        
-    Returns:
-        list: Simulations that are part of the sweep session
-    """
-    return SimulationResult.query.filter_by(sweep_session=sweep_session).order_by(SimulationResult.sweep_index).all()
-
 def search_simulations(circuit_type=None, min_qubits=None, max_qubits=None, 
                       time_crystal_detected=None, comb_detected=None, is_starred=None):
     """
