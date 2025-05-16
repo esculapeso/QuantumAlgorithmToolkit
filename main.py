@@ -55,6 +55,15 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Please log in to access this page.'
+login_manager.login_message_category = 'warning'
+
+@login_manager.unauthorized_handler
+def unauthorized():
+    """Handle unauthorized access attempts."""
+    flash('You must be logged in to access this page.', 'warning')
+    # Store the page the user was trying to access in the session
+    session['next_url'] = request.url if request.method == 'GET' else None
+    return render_template('unauthorized.html'), 401
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -719,6 +728,7 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
 
 
 @app.route('/run_simulation', methods=['POST'])
+@login_required
 def run_simulation():
     """Run a simulation with the provided parameters."""
     try:
@@ -1432,6 +1442,7 @@ def view_simulations():
 # simulation status through BACKGROUND_SIMULATIONS dictionary
 
 @app.route('/api/simulation/<result_name>/toggle_star', methods=['POST'])
+@login_required
 def toggle_simulation_star(result_name):
     """Toggle the starred status of a simulation."""
     try:
@@ -1471,6 +1482,7 @@ def toggle_simulation_star(result_name):
         }), 500
 
 @app.route('/api/simulations/starred', methods=['GET'])
+@login_required
 def get_starred_simulations():
     """Get all starred simulations."""
     try:
