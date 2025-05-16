@@ -27,12 +27,15 @@ class SimulationResult(db.Model):
     is_starred = db.Column(db.Boolean, default=False)
     
     # Parameter sweep information
-    sweep_session = db.Column(db.String(255), nullable=True, index=True)
+    sweep_session = db.Column(db.String(255), db.ForeignKey('parameter_sweeps.session_id'), nullable=True, index=True)
     sweep_index = db.Column(db.Integer, nullable=True)
     sweep_param1 = db.Column(db.String(50), nullable=True)
     sweep_value1 = db.Column(db.Float, nullable=True)
     sweep_param2 = db.Column(db.String(50), nullable=True)
     sweep_value2 = db.Column(db.Float, nullable=True)
+    
+    # Relationship to the parameter sweep
+    parameter_sweep = db.relationship('ParameterSweep', back_populates='simulations')
     
     # Analysis results
     drive_frequency = db.Column(db.Float, nullable=True)
@@ -100,3 +103,23 @@ class CombStructure(db.Model):
     def __repr__(self):
         comb_type = "Logarithmic" if self.is_logarithmic else "Linear"
         return f"<{comb_type}Comb {self.base_frequency:.4f}Hz+{self.spacing:.4f} in {self.component}>"
+
+
+class ParameterSweep(db.Model):
+    """Stores information about parameter sweep sessions."""
+    __tablename__ = 'parameter_sweeps'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(db.String(255), unique=True, nullable=False)
+    circuit_type = db.Column(db.String(50), nullable=False)
+    param1 = db.Column(db.String(50), nullable=True)
+    param2 = db.Column(db.String(50), nullable=True)
+    total_simulations = db.Column(db.Integer, default=0)
+    completed_simulations = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    
+    # Relationship to simulations in this sweep
+    simulations = db.relationship('SimulationResult', back_populates='parameter_sweep')
+    
+    def __repr__(self):
+        return f"<ParameterSweep {self.session_id} - {self.circuit_type}>"

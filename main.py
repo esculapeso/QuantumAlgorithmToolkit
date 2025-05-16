@@ -433,8 +433,27 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
         
         print(f"Sweep parameters: {', '.join([p[0] for p in swept_params])}")
         
-        # Use scan_name as the sweep session ID for all simulations in this sweep
+        # Create a parameter sweep record in the database
         sweep_session_id = scan_name
+        
+        # Create the parameter sweep record in the database
+        with app.app_context():
+            from models import ParameterSweep
+            # Check if the sweep already exists
+            existing_sweep = ParameterSweep.query.filter_by(session_id=sweep_session_id).first()
+            if not existing_sweep:
+                # Create new sweep record
+                new_sweep = ParameterSweep(
+                    session_id=sweep_session_id,
+                    circuit_type=circuit_type,
+                    param1=param1_name,
+                    param2=param2_name,
+                    total_simulations=total_sets,
+                    completed_simulations=0
+                )
+                db.session.add(new_sweep)
+                db.session.commit()
+                print(f"Created parameter sweep record: {sweep_session_id} with {total_sets} simulations")
         
         # Run each simulation independently
         for i, param_set in enumerate(parameter_sets):
@@ -486,7 +505,7 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
                     if result.get('db_record'):
                         try:
                             db_record = result.get('db_record')
-                            db_record.sweep_session = scan_name
+                            db_record.sweep_session = sweep_session_id
                             db_record.sweep_index = i + 1
                             
                             # Store parameter values being swept
@@ -498,7 +517,19 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
                                 db_record.sweep_param2 = param2_name
                                 db_record.sweep_value2 = float(param_set.get(param2_name, 0))
                             
+                            # Update the parameter sweep completion counter
+                            from models import ParameterSweep
+                            sweep_record = ParameterSweep.query.filter_by(session_id=sweep_session_id).first()
+                            if sweep_record:
+                                sweep_record.completed_simulations += 1
+                            
                             db.session.commit()
+                            
+                            # Log progress
+                            if sweep_record:
+                                progress = (sweep_record.completed_simulations / sweep_record.total_simulations) * 100
+                                print(f"Sweep progress: {sweep_record.completed_simulations}/{sweep_record.total_simulations} ({progress:.1f}%)")
+                                
                         except Exception as db_err:
                             print(f"Error updating sweep metadata in database: {str(db_err)}")
                     
