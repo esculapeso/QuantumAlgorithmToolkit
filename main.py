@@ -663,9 +663,16 @@ def run_parameter_sweep():
         # Continue without the ParameterSweep record as a fallback
         
     # Start the parameter sweep in a background thread
+    sweep_id = None
+    try:
+        if 'param_sweep' in locals() and param_sweep and param_sweep.id:
+            sweep_id = param_sweep.id
+    except Exception as e:
+        print(f"Warning: Unable to get sweep ID: {e}")
+    
     thread = threading.Thread(
         target=run_parameter_scan,
-        args=(circuit_type, param_grid, init_state, sweep_session, scan_name)
+        args=(circuit_type, param_grid, init_state, sweep_session, sweep_id, scan_name)
     )
     thread.daemon = True
     thread.start()
