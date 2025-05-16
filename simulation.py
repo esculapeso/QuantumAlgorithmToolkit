@@ -743,7 +743,10 @@ def run_parameter_scan(circuit_type, parameter_sets, scan_name='parameter_scan',
                 'aer_method': aer_method,
                 'verbose': verbose
             }
-            sim_params.update(params)
+            
+            # Copy params but remove any param_ranges key to avoid errors
+            filtered_params = {k: v for k, v in params.items() if k != 'param_ranges'}
+            sim_params.update(filtered_params)
             
             # Actually run the simulation
             result = run_simulation(**sim_params)
