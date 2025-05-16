@@ -720,20 +720,45 @@ def run_parameter_scan(circuit_type, parameter_sets, scan_name='parameter_scan',
     
     # Loop through each parameter set
     for i, params in enumerate(parameter_sets):
+        # Make a deep copy to avoid modifying the original
+        current_params = params.copy()
+        
+        # Get the active parameters being swept
+        active_params = []
+        for key, value in current_params.items():
+            if key not in ['circuit_type', 'init_state', 'param_set_name', 'save_results', 
+                         'show_plots', 'aer_method', 'verbose']:
+                active_params.append(key)
+        
         if verbose:
             print(f"\nRunning parameter set {i+1}/{len(parameter_sets)}:")
-            for key, value in params.items():
-                print(f"  {key}: {value}")
+            for key in active_params:
+                if key in current_params:
+                    print(f"  {key}: {current_params[key]}")
         
-        # Create a name for this parameter set
+        # Create a name for this parameter set that only includes changed parameters
         param_values = []
-        for key, value in params.items():
-            formatted_value = format_param(value, '.2f' if isinstance(value, float) else '')
-            param_values.append(f"{key}={formatted_value}")
+        for key in active_params:
+            if key in current_params:
+                formatted_value = format_param(current_params[key], '.2f' if isinstance(current_params[key], float) else '')
+                param_values.append(f"{key}={formatted_value}")
         param_set_name = '_'.join(param_values)
         
         # Run simulation with these parameters
         try:
+            # Get which parameters are being swept for database tracking
+            sweep_param_names = []
+            sweep_param_values = []
+            for key in active_params:
+                sweep_param_names.append(key)
+                sweep_param_values.append(current_params[key])
+                
+            # Set up sweep tracking parameters for first and second parameters
+            sweep_param1 = sweep_param_names[0] if len(sweep_param_names) > 0 else None
+            sweep_value1 = sweep_param_values[0] if len(sweep_param_values) > 0 else None
+            sweep_param2 = sweep_param_names[1] if len(sweep_param_names) > 1 else None
+            sweep_value2 = sweep_param_values[1] if len(sweep_param_values) > 1 else None
+            
             # Merge the parameter set with default settings
             sim_params = {
                 'circuit_type': circuit_type,
@@ -741,11 +766,17 @@ def run_parameter_scan(circuit_type, parameter_sets, scan_name='parameter_scan',
                 'save_results': save_results,
                 'show_plots': show_plots,
                 'aer_method': aer_method,
-                'verbose': verbose
+                'verbose': verbose,
+                'sweep_session': sweep_session,
+                'sweep_index': i,
+                'sweep_param1': sweep_param1,
+                'sweep_value1': sweep_value1,
+                'sweep_param2': sweep_param2,
+                'sweep_value2': sweep_value2
             }
             
             # Copy params but remove any param_ranges key to avoid errors
-            filtered_params = {k: v for k, v in params.items() if k != 'param_ranges'}
+            filtered_params = {k: v for k, v in current_params.items() if k != 'param_ranges'}
             sim_params.update(filtered_params)
             
             # Actually run the simulation

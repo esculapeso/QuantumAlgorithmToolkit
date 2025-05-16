@@ -1,0 +1,2 @@
+param_set,status,has_subharmonics,incommensurate_count,mx_comb_found,mx_comb_teeth,mz_comb_found,mz_comb_teeth,mx_log_comb_found,mz_log_comb_found,elapsed_time,param_ranges,shots,drive_steps,time_points,max_time,drive_param
+1,success,False,0,False,0,False,0,False,False,10.541161060333252,qubits,8192,5,100,10.0,0.9
