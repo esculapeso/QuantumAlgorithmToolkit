@@ -68,8 +68,13 @@
         </div>
         <div class="card-body">
           <div class="mb-3">
-            <span class="badge bg-primary">{{ circuit_type }}</span>
+            {% if simulations|length > 0 %}
+            <span class="badge bg-primary">{{ simulations[0].circuit_type }}</span>
             <span class="badge bg-secondary">{{ simulations|length }} Simulations</span>
+            {% elif sweep_record %}
+            <span class="badge bg-primary">{{ sweep_record.circuit_type }}</span>
+            <span class="badge bg-secondary">{{ sweep_record.completed_simulations }}/{{ sweep_record.total_simulations }} Simulations</span>
+            {% endif %}
             <span class="badge bg-info text-dark">Created: {{ created_at }}</span>
             
             {% if param1 %}
@@ -158,6 +163,38 @@
               </table>
             </div>
           
+          {% elif display_mode == 'pending' %}
+            <!-- Sweep in progress or no simulations yet -->
+            <div class="alert alert-info">
+              <h4 class="alert-heading">Sweep in Progress</h4>
+              <p>This parameter sweep is currently running or waiting for simulations to complete.</p>
+              
+              {% if sweep_record %}
+                <div class="progress mb-3">
+                  <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                       role="progressbar" 
+                       style="width: {{ progress }}%;" 
+                       aria-valuenow="{{ progress }}" 
+                       aria-valuemin="0" 
+                       aria-valuemax="100">
+                    {{ sweep_record.completed_simulations }}/{{ sweep_record.total_simulations }}
+                  </div>
+                </div>
+                
+                <p>
+                  <strong>Status:</strong> 
+                  {{ sweep_record.completed_simulations }} of {{ sweep_record.total_simulations }} simulations completed ({{ progress|round|int }}%)
+                </p>
+                
+                <p class="mb-0">
+                  <i class="bi bi-info-circle"></i> 
+                  The simulation results will appear here automatically when they are ready.
+                  You can refresh this page to see the latest progress.
+                </p>
+              {% else %}
+                <p>No detailed progress information available.</p>
+              {% endif %}
+            </div>
           {% else %}
             <p>No parameter sweep data available.</p>
           {% endif %}

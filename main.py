@@ -1751,12 +1751,46 @@ def run_example_parameter_scan():
 def view_sweep_grid(sweep_session):
     """View parameter sweep results in a grid format."""
     try:
+        # First, check if the sweep session exists in the database
+        from models import ParameterSweep
+        sweep_record = ParameterSweep.query.filter_by(session_id=sweep_session).first()
+        
+        if not sweep_record:
+            flash(f"Parameter sweep session not found: {sweep_session}", "warning")
+            return redirect(url_for('parameter_sweep'))
+        
         # Get all simulations for this sweep session
         simulations = SimulationResult.query.filter_by(sweep_session=sweep_session).order_by(SimulationResult.sweep_index).all()
         
         if not simulations:
-            flash(f"No simulations found for sweep session: {sweep_session}", "warning")
-            return redirect(url_for('dashboard'))
+            # This sweep exists but has no simulations yet, probably in progress
+            # Return a template with "in progress" or "waiting for results" message
+            progress = (sweep_record.completed_simulations / sweep_record.total_simulations) * 100 if sweep_record.total_simulations > 0 else 0
+            
+            circuit_type_name = sweep_record.circuit_type
+            sweep_session_title = f"Parameter Sweep: {circuit_type_name}"
+            
+            if sweep_record.param1:
+                param1_name = sweep_record.param1.replace('_', ' ').title()
+                sweep_session_title += f" - {param1_name} Sweep"
+                
+                if sweep_record.param2:
+                    param2_name = sweep_record.param2.replace('_', ' ').title()
+                    sweep_session_title += f" & {param2_name} Sweep"
+            
+            return render_template('sweep_grid.html',
+                                  sweep_session=sweep_session,
+                                  sweep_session_title=sweep_session_title,
+                                  simulations=[],
+                                  display_mode='pending',
+                                  param1=sweep_record.param1,
+                                  param2=sweep_record.param2,
+                                  param1_values=[],
+                                  param2_values=[],
+                                  grid_lookup={},
+                                  created_at=sweep_record.created_at.strftime('%Y-%m-%d %H:%M') if sweep_record.created_at else '',
+                                  sweep_record=sweep_record,
+                                  progress=progress)
         
         # Extract sweep parameters
         param1 = simulations[0].sweep_param1
