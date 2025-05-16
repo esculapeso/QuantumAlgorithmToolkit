@@ -653,12 +653,12 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
                 
                 # Import here to avoid circular imports
                 from simulation import run_simulation
-                from db_utils import save_simulation_to_db
+                from db_utils import save_simulation_to_db, find_existing_simulation
                 
                 # Create a Flask application context for this simulation
                 with app.app_context():
-                    # Run the simulation
-                    result = run_simulation(
+                    # First check if a simulation with these exact parameters already exists
+                    existing_sim = find_existing_simulation(
                         circuit_type=circuit_type,
                         qubits=param_set.get('qubits', 3),
                         shots=param_set.get('shots', 8192),
@@ -666,18 +666,61 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
                         time_points=param_set.get('time_points', 100),
                         max_time=param_set.get('max_time', 10.0),
                         drive_param=param_set.get('drive_param', 0.9),
-                        init_state=param_set.get('init_state', 'superposition'),
-                        param_set_name=param_set_name,
-                        save_results=True,
-                        show_plots=False,
-                        # Add parameter sweep tracking
-                        sweep_session=sweep_session_id,
-                        sweep_index=i,
-                        sweep_param1=param1_name,
-                        sweep_value1=param_set.get(param1_name) if param1_name else None,
-                        sweep_param2=param2_name,
-                        sweep_value2=param_set.get(param2_name) if param2_name else None
+                        init_state=param_set.get('init_state', 'superposition')
                     )
+                    
+                    if existing_sim:
+                        print(f"✓ Reusing existing simulation for parameters: " + 
+                              f"qubits={qubits}, time_points={time_points}, drive_param={drive_param}")
+                        
+                        # Update sweep information in the existing simulation
+                        existing_sim.sweep_session = sweep_session_id
+                        existing_sim.sweep_index = i
+                        existing_sim.sweep_param1 = param1_name
+                        existing_sim.sweep_value1 = param_set.get(param1_name) if param1_name else None
+                        existing_sim.sweep_param2 = param2_name
+                        existing_sim.sweep_value2 = param_set.get(param2_name) if param2_name else None
+                        
+                        # Save the updated sweep metadata
+                        db.session.commit()
+                        
+                        # Create a result object similar to what run_simulation would return
+                        result = {
+                            'parameters': {
+                                'circuit_type': existing_sim.circuit_type,
+                                'qubits': existing_sim.qubits,
+                                'shots': existing_sim.shots,
+                                'drive_steps': existing_sim.drive_steps,
+                                'time_points': existing_sim.time_points,
+                                'max_time': existing_sim.max_time,
+                                'drive_param': existing_sim.drive_param,
+                                'init_state': existing_sim.init_state
+                            },
+                            'results_path': existing_sim.results_path,
+                            'db_record': existing_sim
+                        }
+                    else:
+                        # Run the simulation if no existing one was found
+                        result = run_simulation(
+                            circuit_type=circuit_type,
+                            qubits=param_set.get('qubits', 3),
+                            shots=param_set.get('shots', 8192),
+                            drive_steps=param_set.get('drive_steps', 5),
+                            time_points=param_set.get('time_points', 100),
+                            max_time=param_set.get('max_time', 10.0),
+                            drive_param=param_set.get('drive_param', 0.9),
+                            init_state=param_set.get('init_state', 'superposition'),
+                            param_set_name=param_set_name,
+                            save_results=True,
+                            show_plots=False,
+                            # Add parameter sweep tracking
+                            sweep_session=sweep_session_id,
+                            sweep_index=i,
+                            sweep_param1=param1_name,
+                            sweep_value1=param_set.get(param1_name) if param1_name else None,
+                            sweep_param2=param2_name,
+                            sweep_value2=param_set.get(param2_name) if param2_name else None
+                        )
                     
                     # Get the result path for tracking
                     results_path = result.get('results_path', '')
