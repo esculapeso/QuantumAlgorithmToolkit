@@ -26,6 +26,14 @@ class SimulationResult(db.Model):
     # User preferences
     is_starred = db.Column(db.Boolean, default=False)
     
+    # Parameter sweep information
+    sweep_session = db.Column(db.String(255), nullable=True, index=True)
+    sweep_index = db.Column(db.Integer, nullable=True)
+    sweep_param1 = db.Column(db.String(50), nullable=True)
+    sweep_value1 = db.Column(db.Float, nullable=True)
+    sweep_param2 = db.Column(db.String(50), nullable=True)
+    sweep_value2 = db.Column(db.Float, nullable=True)
+    
     # Analysis results
     drive_frequency = db.Column(db.Float, nullable=True)
     time_crystal_detected = db.Column(db.Boolean, default=False)
