@@ -443,14 +443,13 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
             existing_sweep = ParameterSweep.query.filter_by(session_id=sweep_session_id).first()
             if not existing_sweep:
                 # Create new sweep record
-                new_sweep = ParameterSweep(
-                    session_id=sweep_session_id,
-                    circuit_type=circuit_type,
-                    param1=param1_name,
-                    param2=param2_name,
-                    total_simulations=total_sets,
-                    completed_simulations=0
-                )
+                new_sweep = ParameterSweep()
+                new_sweep.session_id = sweep_session_id
+                new_sweep.circuit_type = circuit_type
+                new_sweep.param1 = param1_name
+                new_sweep.param2 = param2_name
+                new_sweep.total_simulations = total_sets
+                new_sweep.completed_simulations = 0
                 db.session.add(new_sweep)
                 db.session.commit()
                 print(f"Created parameter sweep record: {sweep_session_id} with {total_sets} simulations")
