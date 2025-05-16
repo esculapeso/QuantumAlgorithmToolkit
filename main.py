@@ -437,3 +437,66 @@ def parameter_sweep():
                            default_time=default_time,
                            active_sweep=active_sweep_info,
                            completed_sweeps=completed_sweeps)
+
+@app.route('/api/sweep_sessions')
+@login_required
+def api_sweep_sessions():
+    """API endpoint to get sweep sessions."""
+    try:
+        # First try to use the ParameterSweep model
+        sweep_records = ParameterSweep.query.filter_by(status="completed").order_by(ParameterSweep.created_at.desc()).limit(10).all()
+        
+        sessions = []
+        for sweep in sweep_records:
+            sim_count = SimulationResult.query.filter_by(sweep_session=sweep.session_id).count()
+            sessions.append({
+                'session_id': sweep.session_id,
+                'created_at': sweep.created_at.strftime('%Y-%m-%d %H:%M'),
+                'circuit_type': sweep.circuit_type,
+                'param1': sweep.param1_name.replace('_', ' ').title() if sweep.param1_name else None,
+                'param2': sweep.param2_name.replace('_', ' ').title() if sweep.param2_name else None,
+                'simulation_count': sim_count
+            })
+            
+        # If no parameter sweep records, fall back to direct simulation results
+        if not sessions:
+            from sqlalchemy import func
+            
+            # Get distinct sweep sessions
+            sweep_query = db.session.query(
+                SimulationResult.sweep_session,
+                func.count(SimulationResult.id).label('count'),
+                func.min(SimulationResult.created_at).label('created_at'),
+                func.max(SimulationResult.circuit_type).label('circuit_type')
+            ).filter(
+                SimulationResult.sweep_session != None
+            ).group_by(
+                SimulationResult.sweep_session
+            ).order_by(
+                func.min(SimulationResult.created_at).desc()
+            ).limit(10)
+            
+            sweep_results = sweep_query.all()
+            
+            # Format each sweep session for display
+            for sweep_session, count, created_at, circuit_type in sweep_results:
+                # Get the first simulation to extract parameter names
+                first_sim = SimulationResult.query.filter_by(sweep_session=sweep_session).first()
+                if first_sim:
+                    param1 = first_sim.sweep_param1
+                    param2 = first_sim.sweep_param2
+                    
+                    sessions.append({
+                        'session_id': sweep_session,
+                        'created_at': created_at.strftime('%Y-%m-%d %H:%M'),
+                        'circuit_type': circuit_type,
+                        'param1': param1.replace('_', ' ').title() if param1 else None,
+                        'param2': param2.replace('_', ' ').title() if param2 else None,
+                        'simulation_count': count
+                    })
+        
+        return jsonify(sessions)
+    except Exception as e:
+        print(f"Error in API endpoint: {str(e)}")
+        traceback.print_exc()
+        return jsonify([]), 500
