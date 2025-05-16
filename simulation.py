@@ -19,7 +19,7 @@ from qiskit.quantum_info import Statevector
 # which has proper fallback handling
 from quantum_circuits import AerSimulator
 
-def run_parameter_scan(circuit_type, param_grid, init_state, sweep_session, scan_name):
+def run_parameter_scan(circuit_type, param_grid, init_state=None, sweep_session=None, scan_name='parameter_scan'):
     """
     Run a parameter sweep across a grid of parameter values.
     
@@ -30,6 +30,10 @@ def run_parameter_scan(circuit_type, param_grid, init_state, sweep_session, scan
         sweep_session (str): Unique ID for this sweep session
         scan_name (str): Human-readable name for this sweep
     """
+    # Generate sweep session ID if not provided
+    if sweep_session is None:
+        import uuid
+        sweep_session = str(uuid.uuid4())
     print(f"Starting parameter sweep with {len(param_grid)} combinations")
     
     # Import needed modules
