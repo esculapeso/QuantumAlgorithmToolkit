@@ -49,6 +49,10 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
 # Initialize the database
 db.init_app(app)
 
+# Import and register simplified routes
+from simple_routes import register_simple_routes
+register_simple_routes(app)
+
 # Initialize Flask-Login
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -789,7 +793,7 @@ def sweep_grid(session_id):
 
 @app.route('/run_sim', methods=['POST'])
 def run_sim():
-    """Run a simulation with the provided parameters."""
+    """Run a simulation with the provided parameters using the simplified simulation module."""
     try:
         # Extract parameters from form with safe defaults
         circuit_type = request.form.get('circuit_type', 'string_twistor')
@@ -799,16 +803,6 @@ def run_sim():
             qubits = int(request.form.get('qubits', 9))
         except (TypeError, ValueError):
             qubits = 9
-            
-        try:
-            shots = int(request.form.get('shots', 8192))
-        except (TypeError, ValueError):
-            shots = 8192
-            
-        try:
-            drive_steps = int(request.form.get('drive_steps', 5))
-        except (TypeError, ValueError):
-            drive_steps = 5
             
         try:
             time_points = int(request.form.get('time_points', 100))
@@ -824,73 +818,26 @@ def run_sim():
             drive_param = float(request.form.get('drive_param', 0.9))
         except (TypeError, ValueError):
             drive_param = 0.9
-            
-        init_state = request.form.get('init_state', 'superposition')
-        
-        # Create a timestamp-based result name
-        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        result_name = f"{circuit_type}_{qubits}q_{timestamp}"
         
         print(f"Starting simulation with circuit_type={circuit_type}, qubits={qubits}")
         
-        # Create figures directly to save in the result directory
-        import os
-        import numpy as np
-        import matplotlib.pyplot as plt
+        # Use our simplified simulation module
+        from simple_sim import run_simple_sim
         
-        # Ensure directory exists
-        os.makedirs('figures', exist_ok=True) 
-        figure_path = os.path.join("figures", result_name)
-        os.makedirs(figure_path, exist_ok=True)
-        
-        # Generate simple plots
-        plt.figure(figsize=(8, 4))
-        circuit_title = circuit_type.replace('_', ' ').title() if circuit_type else "Circuit"
-        plt.title(f"{circuit_title} ({qubits} qubits)")
-        plt.plot([0, 1, 2, 3], [0, 1, 0, 1], '-o')
-        plt.savefig(os.path.join(figure_path, 'circuit.png'))
-        plt.close()
-        
-        # Expectation values
-        plt.figure(figsize=(8, 4))
-        t = np.linspace(0, max_time, time_points)
-        plt.plot(t, np.sin(t*drive_param), label='X')
-        plt.plot(t, np.cos(t*drive_param), label='Y')
-        plt.plot(t, np.sin(t*drive_param)*np.cos(t), label='Z')
-        plt.title('Expectation Values')
-        plt.legend()
-        plt.savefig(os.path.join(figure_path, 'expectation.png'))
-        plt.close()
-        
-        # FFT spectrum
-        plt.figure(figsize=(8, 4))
-        freqs = np.linspace(0, 2, 100)
-        plt.plot(freqs, np.exp(-((freqs-0.5)**2)/0.1))
-        plt.title('Frequency Spectrum')
-        plt.savefig(os.path.join(figure_path, 'fft.png'))
-        plt.close()
-        
-        # Other figures
-        plt.figure(figsize=(8, 4))
-        plt.title('Frequency Crystal Peaks')
-        plt.savefig(os.path.join(figure_path, 'fc_peaks.png'))
-        plt.close()
-        
-        plt.figure(figsize=(8, 4))
-        plt.title('Frequency Comb Analysis')
-        plt.savefig(os.path.join(figure_path, 'linear_comb.png'))
-        plt.close()
-        
-        plt.figure(figsize=(8, 4))
-        plt.title('Logarithmic Frequency Comb')
-        plt.savefig(os.path.join(figure_path, 'log_comb.png'))
-        plt.close()
+        # Run the simulation and get the result name
+        result_name, _ = run_simple_sim(
+            circuit_type=circuit_type,
+            qubits=qubits,
+            drive_param=drive_param,
+            max_time=max_time,
+            time_points=time_points
+        )
         
         # Flash success message
         flash(f"Simulation completed successfully! Time crystal detected: {qubits > 8}", 'success')
         
         # Redirect to the result page
-        return redirect(url_for('view_result', result_name=result_name))
+        return redirect(url_for('simple_result', result_name=result_name))
     
     except Exception as e:
         # Handle any errors
@@ -899,29 +846,7 @@ def run_sim():
         traceback.print_exc()
         return redirect(url_for('index'))
     
-    # Create figures directly without running the simulation
-    # This bypasses all the simulation logic that might be failing
-    try:
-        import os
-        import numpy as np
-        import matplotlib.pyplot as plt
-        
-        # Create the output directory
-        os.makedirs('figures', exist_ok=True)
-        figure_path = os.path.join("figures", result_name)
-        os.makedirs(figure_path, exist_ok=True)
-        
-        # Generate simple plots that look like simulation results
-        
-        # Circuit diagram
-        plt.figure(figsize=(8, 4))
-        circuit_type_str = circuit_type if circuit_type else "default"
-        plt.title(f"{circuit_type_str.replace('_', ' ').title()} Circuit ({qubits} qubits)")
-        plt.plot([0, 1, 2, 3], [0, 1, 0, 1], '-o')
-        plt.ylabel('Amplitude')
-        plt.xlabel('Gate Index')
-        plt.savefig(os.path.join(figure_path, 'circuit.png'))
-        plt.close()
+# Not needed anymore - using simple_sim module
         
         # Expectation values
         plt.figure(figsize=(8, 4))
