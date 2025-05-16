@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Quantum Simulation</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
+    <style>
+        .card {
+            margin-bottom: 20px;
+        }
+        .figure-container img {
+            max-width: 100%;
+            border: 1px solid #444;
+            border-radius: 4px;
+        }
+        .badge-crystal {
+            background-color: #198754;
+            color: white;
+        }
+        .badge-nocrytal {
+            background-color: #dc3545;
+            color: white;
+        }
+        body {
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">Quantum Simulation Tool</h1>
+        
+        <!-- Simulation Form -->
+        <div class="card">
+            <div class="card-header bg-primary-subtle">
+                <h5 class="card-title mb-0">Run Quantum Simulation</h5>
+            </div>
+            <div class="card-body">
+                <form action="/simple_sim_runner" method="post">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="circuit_type" class="form-label">Circuit Type</label>
+                            <select class="form-select" id="circuit_type" name="circuit_type" required>
+                                <option value="string_twistor">String Twistor Frequency Crystal</option>
+                                <option value="penrose">Penrose Tiling Circuit</option>
+                                <option value="qft_basic">Basic QFT Circuit</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="qubits" class="form-label">Number of Qubits</label>
+                            <input type="number" class="form-control" id="qubits" name="qubits" 
+                                   min="1" max="16" value="9" required>
+                            <div class="form-text">
+                                8-10 qubits recommended for best results
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="drive_param" class="form-label">Drive Parameter</label>
+                            <input type="number" class="form-control" id="drive_param" name="drive_param" 
+                                   min="0.1" max="2.0" step="0.1" value="0.9" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="time_points" class="form-label">Time Points</label>
+                            <input type="number" class="form-control" id="time_points" name="time_points" 
+                                   min="10" max="10000" value="100" required>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Run Simulation</button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Results Display (shown only when results are available) -->
+        {% if result %}
+        <div class="card mt-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">Simulation Results: {{ result.name }}</h4>
+                <div>
+                    {% if result.time_crystal_detected %}
+                    <span class="badge badge-crystal">Time Crystal Detected</span>
+                    {% else %}
+                    <span class="badge badge-nocrytal">No Time Crystal</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body">
+                <h5>Simulation Parameters</h5>
+                <div class="table-responsive mb-4">
+                    <table class="table table-sm">
+                        <tbody>
+                            <tr>
+                                <th style="width: 180px;">Circuit Type:</th>
+                                <td>{{ result.circuit_type }}</td>
+                                <th style="width: 180px;">Qubits:</th>
+                                <td>{{ result.qubits }}</td>
+                            </tr>
+                            <tr>
+                                <th>Drive Parameter:</th>
+                                <td>{{ result.drive_param }}</td>
+                                <th>Time Points:</th>
+                                <td>{{ result.time_points }}</td>
+                            </tr>
+                            <tr>
+                                <th>Drive Frequency:</th>
+                                <td>{{ result.drive_frequency }}</td>
+                                <th>Timestamp:</th>
+                                <td>{{ result.timestamp }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <h5>Simulation Figures</h5>
+                <div class="row">
+                    {% for figure in figures %}
+                    <div class="col-md-6 mb-3">
+                        <div class="card">
+                            <div class="card-header">
+                                {{ figure.title }}
+                            </div>
+                            <div class="card-body figure-container">
+                                <img src="{{ figure.url }}" alt="{{ figure.title }}" class="img-fluid">
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
