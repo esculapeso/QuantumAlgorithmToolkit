@@ -610,8 +610,11 @@ def run_parameter_sweep():
         flash('Please select at least one parameter to sweep', 'warning')
         return redirect(url_for('parameter_sweep'))
     
+    # Import the function directly to avoid any module reference issues
+    from simulation import generate_parameter_grid
+    
     # Generate parameter grid
-    param_grid = generate_parameter_grid(param_ranges)
+    param_grid = generate_parameter_grid(param_ranges=param_ranges)
     
     if len(param_grid) > 100:
         flash(f'Warning: This will generate {len(param_grid)} simulations, which may take a long time.', 'warning')
