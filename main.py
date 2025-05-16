@@ -613,8 +613,24 @@ def run_parameter_sweep():
     # Import the function directly to avoid any module reference issues
     from simulation import generate_parameter_grid
     
-    # Generate parameter grid
-    param_grid = generate_parameter_grid(param_ranges=param_ranges)
+    # Remove any parameters that aren't being swept
+    sweep_param_ranges = {}
+    for param_name in active_params:
+        if param_name in param_ranges:
+            sweep_param_ranges[param_name] = param_ranges[param_name]
+    
+    # Create a dictionary of fixed parameters
+    fixed_params = {}
+    for param_name, range_info in param_ranges.items():
+        if param_name not in active_params:
+            fixed_params[param_name] = range_info['min']  # Use min value for fixed params
+    
+    # Generate parameter grid (only for swept parameters)
+    param_grid = generate_parameter_grid(param_ranges=sweep_param_ranges)
+    
+    # Add fixed parameters to each parameter set
+    for param_set in param_grid:
+        param_set.update(fixed_params)
     
     if len(param_grid) > 100:
         flash(f'Warning: This will generate {len(param_grid)} simulations, which may take a long time.', 'warning')
