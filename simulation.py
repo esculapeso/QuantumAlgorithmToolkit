@@ -15,11 +15,35 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 import itertools
 
+# Helper function for JSON serialization
+def convert_numpy_type(value):
+    """
+    Convert numpy types to Python native types for database compatibility.
+    
+    Args:
+        value: The value to convert
+        
+    Returns:
+        The converted value as a Python native type
+    """
+    if isinstance(value, (np.integer, np.int64, np.int32)):
+        return int(value)
+    elif isinstance(value, (np.floating, np.float64, np.float32)):
+        return float(value)
+    elif isinstance(value, np.ndarray):
+        return value.tolist()
+    elif isinstance(value, np.bool_):
+        return bool(value)
+    elif isinstance(value, (np.complex64, np.complex128)):
+        return {'real': float(value.real), 'imag': float(value.imag)}
+    else:
+        return value
+
 # Check if we're running in Google Colab
 IN_COLAB = 'google.colab' in sys.modules
 
 def run_parameter_scan(circuit_type, parameter_sets, init_state='superposition', 
-                     sweep_session=None, scan_name='scan', save_results=True, 
+                     sweep_session=None, sweep_id=None, scan_name='scan', save_results=True, 
                      show_plots=False, aer_method='statevector', verbose=True):
     """
     Run a parameter sweep over multiple parameter combinations.
@@ -29,6 +53,7 @@ def run_parameter_scan(circuit_type, parameter_sets, init_state='superposition',
         parameter_sets (list): List of parameter dictionaries, each containing a set of parameters
         init_state (str): Initial quantum state ('superposition', 'up', 'down', etc.)
         sweep_session (str): Session identifier for the parameter sweep
+        sweep_id (int): Database ID of the parameter sweep record
         scan_name (str): Name for this parameter scan
         save_results (bool): Whether to save results to disk
         show_plots (bool): Whether to display plots during simulation
