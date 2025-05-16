@@ -332,7 +332,8 @@ def parameter_sweep():
     ]
     
     # Current timestamp for default scan name
-    now = datetime.datetime.now()
+    current_time = datetime.datetime.now()
+    default_time = current_time.strftime('%Y%m%d-%H%M%S')
     
     # Check if we have an active sweep
     active_sweep = request.args.get('active_sweep')
@@ -433,6 +434,6 @@ def parameter_sweep():
     # Render the parameter sweep page
     return render_template('parameter_sweep.html', 
                            circuit_types=circuit_types, 
-                           default_time=now.strftime('%Y%m%d-%H%M%S'),
+                           default_time=default_time,
                            active_sweep=active_sweep_info,
                            completed_sweeps=completed_sweeps)
