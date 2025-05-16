@@ -850,6 +850,15 @@ def run_sim():
             verbose=True
         )
         
+        # The simulation.py file already tries to save to database, but we'll try here too
+        try:
+            from db_utils import save_simulation_to_db
+            db_record = save_simulation_to_db(result, result_name)
+            if db_record:
+                print(f"Simulation saved to database with ID: {db_record.id}")
+        except Exception as db_error:
+            print(f"Note: Could not save to database: {db_error}")
+            
         # Redirect to the result view page
         return redirect(url_for('view_result', result_name=result_name))
     except Exception as e:
@@ -858,17 +867,13 @@ def run_sim():
         traceback.print_exc()
         return redirect(url_for('index'))
     
-    # Check for errors
-    if result and 'error' in result:
-        flash(f"Simulation error: {result['error']}", 'danger')
+    # This line should never be reached due to the above try/except
+    # but we'll keep it as a fallback for robustness
+    try:
+        return redirect(url_for('view_result', result_name=result_name))
+    except Exception as e:
+        print(f"Error in fallback redirect: {e}")
         return redirect(url_for('index'))
-    
-    # Save the result to the database
-    from db_utils import save_simulation_to_db
-    db_record = save_simulation_to_db(result, result_name)
-    
-    # Redirect to the result page
-    return redirect(url_for('view_result', result_name=result_name))
 
 @app.route('/result/<result_name>')
 def view_result(result_name):
