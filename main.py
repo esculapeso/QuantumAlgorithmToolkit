@@ -1639,5 +1639,114 @@ def run_example_parameter_scan():
     
     print(f"Parameter scan completed. Processed {len(results)} parameter sets.")
 
+@app.route('/sweep_grid/<sweep_session>')
+def view_sweep_grid(sweep_session):
+    """View parameter sweep results in a grid format."""
+    try:
+        # Get all simulations for this sweep session
+        simulations = SimulationResult.query.filter_by(sweep_session=sweep_session).order_by(SimulationResult.sweep_index).all()
+        
+        if not simulations:
+            flash(f"No simulations found for sweep session: {sweep_session}", "warning")
+            return redirect(url_for('dashboard'))
+        
+        # Extract sweep parameters
+        param1 = simulations[0].sweep_param1
+        param2 = simulations[0].sweep_param2
+        
+        # Get unique values for parameters
+        param1_values = sorted(list(set([sim.sweep_value1 for sim in simulations if sim.sweep_value1 is not None])))
+        param2_values = sorted(list(set([sim.sweep_value2 for sim in simulations if sim.sweep_param2 == param2 and sim.sweep_value2 is not None])))
+        
+        # Create lookup grid
+        grid_lookup = {}
+        for sim in simulations:
+            if param2 and sim.sweep_value2 is not None:
+                # Two parameter sweep
+                grid_lookup[(sim.sweep_value1, sim.sweep_value2)] = sim
+            else:
+                # Single parameter sweep
+                grid_lookup[sim.sweep_value1] = sim
+        
+        # Determine display mode
+        display_mode = 'two_params' if param2 and len(param2_values) > 0 else 'single_param'
+        
+        # Create a nice title
+        circuit_type_name = next((ct['name'] for ct in circuit_types if ct['id'] == simulations[0].circuit_type), simulations[0].circuit_type)
+        sweep_session_title = f"Parameter Sweep: {circuit_type_name}"
+        
+        if param1:
+            param1_name = param1.replace('_', ' ').title()
+            sweep_session_title += f" - {param1_name} Sweep"
+            
+            if param2:
+                param2_name = param2.replace('_', ' ').title()
+                sweep_session_title += f" & {param2_name} Sweep"
+        
+        created_at = simulations[0].created_at.strftime('%Y-%m-%d %H:%M') if simulations[0].created_at else ''
+        
+        return render_template('sweep_grid.html',
+                              sweep_session=sweep_session,
+                              sweep_session_title=sweep_session_title,
+                              simulations=simulations,
+                              param1=param1.replace('_', ' ').title() if param1 else None,
+                              param2=param2.replace('_', ' ').title() if param2 else None,
+                              param1_values=param1_values,
+                              param2_values=param2_values,
+                              display_mode=display_mode,
+                              grid_lookup=grid_lookup,
+                              circuit_type=circuit_type_name,
+                              created_at=created_at)
+    
+    except Exception as e:
+        print(f"Error viewing sweep grid: {str(e)}")
+        traceback.print_exc()
+        flash(f"Error viewing sweep grid: {str(e)}", "danger")
+        return redirect(url_for('dashboard'))
+        
+@app.route('/api/sweep_sessions')
+def list_sweep_sessions():
+    """List all parameter sweep sessions."""
+    try:
+        # Get all unique sweep sessions
+        sweep_sessions = db.session.query(
+            SimulationResult.sweep_session,
+            SimulationResult.circuit_type,
+            db.func.min(SimulationResult.created_at).label('created_at'),
+            db.func.count(SimulationResult.id).label('simulation_count')
+        ).filter(SimulationResult.sweep_session != None).group_by(
+            SimulationResult.sweep_session, SimulationResult.circuit_type
+        ).order_by(db.desc('created_at')).all()
+        
+        sessions_data = []
+        for session in sweep_sessions:
+            # Get the parameter names for this session
+            param_info = db.session.query(
+                SimulationResult.sweep_param1,
+                SimulationResult.sweep_param2
+            ).filter(SimulationResult.sweep_session == session.sweep_session).first()
+            
+            if param_info:
+                param1 = param_info.sweep_param1.replace('_', ' ').title() if param_info.sweep_param1 else ""
+                param2 = param_info.sweep_param2.replace('_', ' ').title() if param_info.sweep_param2 else ""
+                
+                # Get a nicer name for the circuit type
+                circuit_type_name = next((ct['name'] for ct in circuit_types if ct['id'] == session.circuit_type), session.circuit_type)
+                
+                sessions_data.append({
+                    'session_id': session.sweep_session,
+                    'circuit_type': circuit_type_name,
+                    'created_at': session.created_at.strftime('%Y-%m-%d %H:%M') if session.created_at else '',
+                    'simulation_count': session.simulation_count,
+                    'param1': param1,
+                    'param2': param2
+                })
+        
+        return jsonify(sessions_data)
+    except Exception as e:
+        print(f"Error listing sweep sessions: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == "__main__":
     main()
