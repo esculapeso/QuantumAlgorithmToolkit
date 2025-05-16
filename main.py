@@ -737,14 +737,32 @@ def sweep_grid(session_id):
     if not param1_values:
         # If no param1 values, set a default
         param1_values = [None]
+        
+    # Set up grid lookup for two-parameter display
+    grid_lookup = {}
+    for sim in sim_data:
+        if 'param1_value' in sim and 'param2_value' in sim:
+            grid_lookup[(sim['param1_value'], sim['param2_value'])] = sim
+            
+    # Determine display mode
+    display_mode = 'no_data'
+    if param1_values and param1_values[0] is not None:
+        display_mode = 'single_param'
+        if param2_values and param2_values[0] is not None:
+            display_mode = 'two_params'
     
     return render_template('sweep_grid.html',
-                           sweep=sweep_info,
+                           sweep_session=session_id,
+                           sweep_session_title=sweep_info['name'],
+                           circuit_type=sweep_info['circuit_type'],
+                           created_at=sweep_info['created_at'],
+                           param1=sweep_info['param1'].replace('_', ' ').title() if sweep_info['param1'] else None,
+                           param2=sweep_info['param2'].replace('_', ' ').title() if sweep_info['param2'] else None,
                            simulations=sim_data,
                            param1_values=param1_values,
                            param2_values=param2_values,
-                           param1_label=sweep_info['param1'].replace('_', ' ').title() if sweep_info['param1'] else None,
-                           param2_label=sweep_info['param2'].replace('_', ' ').title() if sweep_info['param2'] else None)
+                           grid_lookup=grid_lookup,
+                           display_mode=display_mode)
 
 @app.route('/run_sim', methods=['POST'])
 @login_required
