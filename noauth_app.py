@@ -3,6 +3,9 @@ Simplified quantum simulation app with no authentication or database dependencie
 """
 import os
 import numpy as np
+import matplotlib
+# Set non-interactive backend to avoid GUI warnings
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file

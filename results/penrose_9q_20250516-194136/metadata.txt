@@ -1,0 +1,8 @@
+circuit_type: penrose
+qubits: 9
+drive_param: 0.9
+max_time: 10.0
+time_points: 100
+time_crystal_detected: True
+incommensurate_count: 4
+created_at: 2025-05-16 19:41:36
