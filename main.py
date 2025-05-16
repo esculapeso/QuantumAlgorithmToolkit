@@ -516,18 +516,23 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
                                 db_record.sweep_param2 = param2_name
                                 db_record.sweep_value2 = float(param_set.get(param2_name, 0))
                             
-                            # Update the parameter sweep completion counter
-                            from models import ParameterSweep
-                            sweep_record = ParameterSweep.query.filter_by(session_id=sweep_session_id).first()
-                            if sweep_record:
-                                sweep_record.completed_simulations += 1
-                            
                             db.session.commit()
                             
-                            # Log progress
-                            if sweep_record:
-                                progress = (sweep_record.completed_simulations / sweep_record.total_simulations) * 100
-                                print(f"Sweep progress: {sweep_record.completed_simulations}/{sweep_record.total_simulations} ({progress:.1f}%)")
+                            # Separately update the parameter sweep completion counter
+                            try:
+                                from models import ParameterSweep
+                                sweep_record = ParameterSweep.query.filter_by(session_id=sweep_session_id).first()
+                                if sweep_record:
+                                    sweep_record.completed_simulations += 1
+                                    db.session.commit()
+                                    
+                                    # Log progress
+                                    progress = (sweep_record.completed_simulations / sweep_record.total_simulations) * 100
+                                    print(f"Sweep progress: {sweep_record.completed_simulations}/{sweep_record.total_simulations} ({progress:.1f}%)")
+                                else:
+                                    print(f"Warning: Parameter sweep record not found for session {sweep_session_id}")
+                            except Exception as sweep_err:
+                                print(f"Error updating sweep completion counter: {str(sweep_err)}")
                                 
                         except Exception as db_err:
                             print(f"Error updating sweep metadata in database: {str(db_err)}")

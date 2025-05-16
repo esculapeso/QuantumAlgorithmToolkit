@@ -566,6 +566,8 @@
         fetch('/api/sweep_sessions')
             .then(response => response.json())
             .then(data => {
+                console.log("Loaded sweep sessions:", data);
+                
                 // Hide loading spinner
                 if (loadingIndicator) {
                     loadingIndicator.style.display = 'none';
@@ -594,7 +596,7 @@
                         paramBadges += `<span class="badge bg-info text-dark me-1">${session.param2}</span>`;
                     }
                     
-                    // Add progress bar for ongoing sweeps
+                    // Add progress indicator for in-progress sweeps
                     let progressBar = '';
                     if (session.completed_simulations < session.total_simulations) {
                         const progress = Math.round((session.completed_simulations / session.total_simulations) * 100);
@@ -617,6 +619,7 @@
                                     <div class="fw-bold">${session.circuit_type}</div>
                                     <small class="text-muted">${session.created_at}</small>
                                     <div class="mt-1">${paramBadges}</div>
+                                    ${progressBar}
                                 </div>
                                 <div class="d-flex align-items-center">
                                     <span class="badge bg-primary rounded-pill me-2">${session.simulation_count} sim(s)</span>
