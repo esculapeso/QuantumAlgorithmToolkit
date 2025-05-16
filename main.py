@@ -379,7 +379,14 @@ def run_parameter_sweep():
                 init_state=param_set.get('init_state', 'superposition'),
                 param_set_name=scan_name,
                 save_results=True,
-                show_plots=False
+                show_plots=False,
+                # Add parameter sweep tracking for single simulation
+                sweep_session=scan_name,
+                sweep_index=0,
+                sweep_param1=None,
+                sweep_value1=None,
+                sweep_param2=None,
+                sweep_value2=None
             )
             
             # Get the result path to redirect to
@@ -461,7 +468,14 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
                         init_state=param_set.get('init_state', 'superposition'),
                         param_set_name=param_set_name,
                         save_results=True,
-                        show_plots=False
+                        show_plots=False,
+                        # Add parameter sweep tracking
+                        sweep_session=sweep_session_id,
+                        sweep_index=i,
+                        sweep_param1=param1_name,
+                        sweep_value1=param_set.get(param1_name) if param1_name else None,
+                        sweep_param2=param2_name,
+                        sweep_value2=param_set.get(param2_name) if param2_name else None
                     )
                     
                     # Get the result path for tracking

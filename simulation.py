@@ -373,7 +373,14 @@ def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
                 'time_points': time_points,
                 'max_time': max_time,
                 'drive_param': drive_param,
-                'init_state': init_state
+                'init_state': init_state,
+                # Add parameter sweep tracking information
+                'sweep_session': sweep_session,
+                'sweep_index': sweep_index,
+                'sweep_param1': sweep_param1,
+                'sweep_value1': sweep_value1,
+                'sweep_param2': sweep_param2,
+                'sweep_value2': sweep_value2
             },
             'basic_analysis': {
                 'drive_frequency': analysis.get('drive_frequency', 0),
