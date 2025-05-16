@@ -48,59 +48,80 @@ except ImportError:
 
 def create_penrose_circuit(qubits, shots, drive_steps, init_state=None, drive_param=0.9):
     """Creates a Penrose-inspired quantum circuit."""
-    # Create a circuit with specified number of qubits
+    # Create circuit
     qc = QuantumCircuit(qubits)
     
     # Initialize with custom state if provided
     if init_state is not None:
         if isinstance(init_state, str):
             if init_state == 'superposition':
-                # Put all qubits in superposition
                 for q in range(qubits):
                     qc.h(q)
-            elif init_state.startswith('|'):
-                # Parse a ket notation (simplified)
-                try:
-                    # Convert |01+-> to appropriate gates
-                    state_spec = init_state.strip('|').strip('>')
-                    if len(state_spec) != qubits:
-                        raise ValueError(f"State spec '{state_spec}' length doesn't match qubit count {qubits}")
-                    
-                    for q, char in enumerate(state_spec):
-                        if char == '1':
-                            qc.x(q)  # |1>
-                        elif char == '+':
-                            qc.h(q)  # |+>
-                        elif char == '-':
-                            qc.x(q)
-                            qc.h(q)  # |->
-                        # |0> is default, no gate needed
-                except Exception as e:
-                    print(f"Error initializing circuit with '{init_state}': {e}")
-                    # Fall back to all-zero state
+            elif init_state.startswith('|') and init_state.endswith('>'):
+                # Parse state like |01+->
+                state_spec = init_state[1:-1]
+                if len(state_spec) != qubits:
+                    raise ValueError(f"Initial state {init_state} doesn't match qubit count {qubits}")
+                for q, state_char in enumerate(state_spec):
+                    if state_char == '1':
+                        qc.x(q)
+                    elif state_char == '+':
+                        qc.h(q)
+                    elif state_char == '-':
+                        qc.x(q)
+                        qc.h(q)
+    else:
+        # Default to superposition
+        for q in range(qubits):
+            qc.h(q)
     
     # Define time parameter
     t = Parameter('t')
     
-    # Add drive sequence using penrose tiling inspired sequence
+    # Penrose tiling inspired pattern:
+    # - Use golden ratio derived phases
+    # - Create a pattern of rotations that emulates the aperiodic nature 
+    #   of Penrose tilings
+    phi = (1 + np.sqrt(5)) / 2  # Golden ratio
+    
     for step in range(drive_steps):
+        # Base angle modulated by the time parameter
         angle = t * drive_param
-        phase_factor = np.pi * ((1 + np.sqrt(5))/2) * step  # Golden ratio for Penrose
         
-        # Apply pattern of gates
+        # Apply X-rotations with phases derived from golden ratio
         for q in range(qubits):
-            # Alternate between X, Y rotations with penrose-inspired phases
-            if (q + step) % 2 == 0:
-                qc.rx(angle + phase_factor, q)
-            else:
-                qc.ry(angle + phase_factor, q)
+            # Rotations with golden-ratio inspired phases
+            phase = np.pi * ((q * phi) % 1)
+            qc.rx(angle * phase, q)
+        
+        # Apply Z-rotations in an alternating pattern
+        for q in range(qubits):
+            qc.rz(angle * (1 - ((q * phi) % 1)), q)
             
-        # Add entangling layer
+        # Entangle qubits in a pattern inspired by Penrose tiling adjacency
         for q in range(qubits-1):
-            qc.cz(q, q+1)
-        # Optional: add a non-local entanglement
-        if qubits > 2:
-            qc.cz(0, qubits-1)  # Connect first and last qubits
+            # Connect adjacent vertices
+            qc.cx(q, q+1)
+            
+        # Add non-adjacent connections based on Penrose-like pattern
+        for q in range(qubits-2):
+            # Skip connections to create aperiodic pattern
+            if (q * phi) % 1 < 0.5:  
+                qc.cx(q, q+2)
+                
+        # Apply a phase rotation to even-indexed qubits
+        for q in range(0, qubits, 2):
+            qc.p(angle / phi, q)
+            
+        # Apply a different phase rotation to odd-indexed qubits
+        for q in range(1, qubits, 2):
+            qc.p(angle * phi, q)
+            
+        # One final transversal rotation based on golden ratio
+        for q in range(qubits):
+            # Use a phase pattern that completes the Penrose-inspired sequence
+            phase = 2 * np.pi * ((q + step) * phi) % (2 * np.pi)
+            qc.rx(angle * np.sin(phase), q)
     
     return qc, t
 
@@ -115,43 +136,46 @@ def create_qft_basic_circuit(qubits, shots, drive_steps, init_state=None, drive_
             if init_state == 'superposition':
                 for q in range(qubits):
                     qc.h(q)
-            # Other initializations handled as in the penrose function
+            # Other initialization options handled like in the previous function
+    else:
+        # Default to superposition
+        for q in range(qubits):
+            qc.h(q)
     
     # Define time parameter
     t = Parameter('t')
     
-    # Apply QFT-based sequence
+    # Build circuit
     for step in range(drive_steps):
         angle = t * drive_param
         
-        # Apply rotations
+        # Apply parameterized rotations
         for q in range(qubits):
-            phase_factor = np.pi * step / (q+1)  # Frequency depends on qubit index
-            qc.rx(angle + phase_factor, q)
-        
-        # Apply partial QFT
-        if step % 2 == 0 and qubits > 1:
-            # Add QFT on a subset of qubits
-            qft_size = min(3, qubits)  # Limit QFT size for larger circuits
-            qft_start = (step // 2) % (qubits - qft_size + 1)  # Cycle through positions
+            qc.rx(angle, q)
             
-            # Custom QFT implementation for partial register
-            for i in range(qft_size):
-                q1 = qft_start + i
-                qc.h(q1)
-                for j in range(i+1, qft_size):
-                    q2 = qft_start + j
-                    qc.cp(np.pi/(2**(j-i)), q1, q2)
-        
-        # Add entangling layer
-        for q in range(qubits-1):
-            qc.cz(q, q+1)
+        # Apply QFT
+        qc.append(QFT(num_qubits=qubits, approximation_degree=0, do_swaps=True, 
+                      inverse=False, insert_barriers=False, name='qft'), 
+                  range(qubits))
+                  
+        # Apply parameterized phase rotations
+        for q in range(qubits):
+            qc.p(angle * (q+1)/qubits, q)
+            
+        # Apply inverse QFT
+        qc.append(QFT(num_qubits=qubits, approximation_degree=0, do_swaps=True,
+                      inverse=True, insert_barriers=False, name='iqft'),
+                  range(qubits))
+                  
+        # Apply Z rotations with different phases
+        for q in range(qubits):
+            qc.rz(angle * (qubits-q)/qubits, q)
     
     return qc, t
 
 def create_comb_generator_circuit(qubits, shots, drive_steps, init_state=None, drive_param=0.9):
     """Creates a circuit designed to generate frequency combs."""
-    # Create circuit
+    # Create circuit 
     qc = QuantumCircuit(qubits)
     
     # Initialize with custom state if provided
@@ -161,32 +185,41 @@ def create_comb_generator_circuit(qubits, shots, drive_steps, init_state=None, d
                 for q in range(qubits):
                     qc.h(q)
             # Other initializations handled as in previous functions
+    else:
+        # Default to superposition
+        for q in range(qubits):
+            qc.h(q)
     
     # Define time parameter
     t = Parameter('t')
     
-    # Create frequency comb circuit
+    # Build circuit with patterns conducive to frequency comb generation
     for step in range(drive_steps):
         angle = t * drive_param
         
-        # Base frequencies for each qubit - establishing the "teeth" of the comb
+        # Regular pattern of rotations creates specific frequencies
         for q in range(qubits):
-            # Each qubit gets a different base frequency
-            base_freq = np.pi * (q+1) / qubits
-            qc.rx(angle * base_freq, q)
+            # Use a comb-like pattern of phases
+            qc.rx(angle, q)
+            qc.rz(angle * np.pi * q / qubits, q)
         
-        # Entangle to create interference
-        for q in range(qubits-1):
-            qc.cx(q, q+1)
+        # Create entangled states (long-range correlations important for frequency combs)
+        if step % 2 == 0:
+            # Linear nearest-neighbor pattern
+            for q in range(qubits-1):
+                qc.cx(q, q+1)
+            # Connect back to create a ring
+            if qubits > 2:
+                qc.cx(qubits-1, 0)
+        else:
+            # Long-range connections
+            for q in range(qubits//2):
+                qc.cx(q, qubits - q - 1)
         
-        # Apply rotation layer with harmonics
+        # Additional pattern of phase rotations
         for q in range(qubits):
-            harmonic = np.pi * (step+1) / (drive_steps/2)
-            qc.ry(angle * harmonic, q)
-        
-        # Connect first and last qubits to create circular boundary condition
-        if qubits > 2:
-            qc.cx(qubits-1, 0)
+            # These phases create regular "teeth" in the frequency domain
+            qc.p(angle * 2 * np.pi * (q+1) / qubits, q)
     
     return qc, t
 
@@ -206,25 +239,45 @@ def create_comb_twistor_circuit(qubits, shots, drive_steps, init_state=None, dri
     # Define time parameter
     t = Parameter('t')
     
-    # Twistor-inspired sequence
+    # Define a twistor-inspired transformation sequence
     for step in range(drive_steps):
         angle = t * drive_param
         
-        # Phase factors inspired by twistor diagrams
+        # First layer: Individual rotations with twistor-inspired phases
         for q in range(qubits):
-            # Create a twisting pattern of phases
-            twist_factor = np.pi * ((q+1) * (step+1)) / (qubits * drive_steps)
-            qc.rx(angle + twist_factor, q)
-            qc.rz(angle * twist_factor, q)
+            # Spinor-like transformation
+            phase = 2 * np.pi * q / qubits
+            qc.rx(angle * np.cos(phase), q)
+            qc.rz(angle * np.sin(phase), q)
         
-        # Create entanglement pattern resembling a twistor diagram
+        # Second layer: Entanglement inspired by twistor space geometry
         for q in range(qubits-1):
             qc.cx(q, q+1)
-        
-        # Add long-range connections in a twisting pattern
-        if qubits > 3:
-            twist_target = (step % (qubits-1))
-            qc.cx(0, twist_target+1)  # Connect qubit 0 to a cycling target
+            
+        # Create differential rotation patterns
+        if step % 3 == 0:
+            # Pattern A
+            for q in range(qubits):
+                qc.rx(angle * (q+1) / qubits, q)
+        elif step % 3 == 1:
+            # Pattern B
+            for q in range(qubits):
+                qc.ry(angle * (qubits-q) / qubits, q)
+        else:
+            # Pattern C
+            for q in range(qubits):
+                qc.rz(angle * np.sin(2*np.pi*q/qubits), q)
+                
+        # Additional controlled rotations to create comb-like interference
+        for q in range(0, qubits-1, 2):
+            control = q
+            target = (q + 1) % qubits
+            qc.crx(angle * np.pi / 4, control, target)
+            
+        for q in range(1, qubits-1, 2):
+            control = q
+            target = (q + 1) % qubits
+            qc.cry(angle * np.pi / 4, control, target)
     
     return qc, t
 
