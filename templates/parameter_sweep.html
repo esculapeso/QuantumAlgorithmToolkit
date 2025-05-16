@@ -508,14 +508,11 @@
         // Set up auto-refresh for active sweep (if there is one)
         setupActiveSweepRefresh();
         
-        // Load the list of sweep sessions
-        loadSweepSessions();
-        
-        // Set up refresh button
+        // Only set up refresh button for sweep sessions without disabling existing ones
         const refreshBtn = document.getElementById('refresh-sweeps-btn');
         if (refreshBtn) {
             refreshBtn.addEventListener('click', function() {
-                loadSweepSessions();
+                window.location.reload(); // Simple reload to get fresh data
             });
         }
     });
