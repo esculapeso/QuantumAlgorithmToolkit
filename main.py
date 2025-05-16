@@ -213,10 +213,64 @@ def parameter_sweep():
     # Current timestamp for default scan name
     now = datetime.datetime.now()
     
+    # Check if we have an active sweep
+    active_sweep = request.args.get('active_sweep')
+    active_sweep_info = None
+    
+    if active_sweep:
+        # Get count of completed simulations for this sweep
+        completed_count = SimulationResult.query.filter_by(sweep_session=active_sweep).count()
+        
+        # Check if we have any information about the total expected simulations
+        # Note: In a production app, you might store this in a separate table or cache
+        total_expected = 0
+        try:
+            # Get the first simulation to find the parameter info
+            first_sim = SimulationResult.query.filter_by(sweep_session=active_sweep).first()
+            if first_sim:
+                # Try to extract circuit type and other info
+                circuit_type = first_sim.circuit_type
+                param1 = first_sim.sweep_param1
+                param2 = first_sim.sweep_param2
+                
+                # Estimate the total number of simulations based on the parameter values
+                param1_values = db.session.query(db.func.count(db.distinct(SimulationResult.sweep_value1))).filter(
+                    SimulationResult.sweep_session == active_sweep
+                ).scalar() or 1
+                
+                param2_values = 1
+                if param2:
+                    param2_values = db.session.query(db.func.count(db.distinct(SimulationResult.sweep_value2))).filter(
+                        SimulationResult.sweep_session == active_sweep
+                    ).scalar() or 1
+                
+                total_expected = param1_values * param2_values
+                
+                # Build active sweep info
+                active_sweep_info = {
+                    'session_id': active_sweep,
+                    'circuit_type': circuit_type,
+                    'param1': param1.replace('_', ' ').title() if param1 else None,
+                    'param2': param2.replace('_', ' ').title() if param2 else None,
+                    'completed': completed_count,
+                    'total': total_expected,
+                    'progress': int((completed_count / total_expected * 100) if total_expected > 0 else 0)
+                }
+        except Exception as e:
+            print(f"Error getting active sweep info: {str(e)}")
+            traceback.print_exc()
+    
+    # Check if this is a JSON request for active sweep status
+    if request.args.get('format') == 'json' and active_sweep:
+        return jsonify({
+            'active_sweep': active_sweep_info
+        })
+        
     return render_template('parameter_sweep.html',
                           circuit_types=circuit_types,
                           now=now,
-                          default_params=config.DEFAULT_SIMULATION_PARAMS)
+                          default_params=config.DEFAULT_SIMULATION_PARAMS,
+                          active_sweep=active_sweep_info)
                           
 @app.route('/run_parameter_sweep', methods=['POST'])
 def run_parameter_sweep():
@@ -296,11 +350,14 @@ def run_parameter_sweep():
         sweep_thread.daemon = True
         sweep_thread.start()
         
-        # Inform the user that simulations are running
-        flash(f"Started running {total_combinations} simulations sequentially. Each will appear in the 'Completed Simulations' list when finished.", "info")
+        # Use scan_name as the sweep session ID
+        sweep_session_id = scan_name
         
-        # Redirect to simulations page to monitor results
-        return redirect(url_for('view_simulations'))
+        # Inform the user that simulations are running
+        flash(f"Started running {total_combinations} simulations sequentially. Progress will be shown on this page.", "info")
+        
+        # Stay on the parameter sweep page
+        return redirect(url_for('parameter_sweep', active_sweep=sweep_session_id))
     else:
         # For a single parameter set, just run it directly
         try:

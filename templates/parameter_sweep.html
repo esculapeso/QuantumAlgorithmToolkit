@@ -410,14 +410,59 @@
         </div>
     </div>
     
-    <!-- Right column for completed sweeps -->
+    <!-- Right column for sweeps -->
     <div class="col-lg-4">
+        {% if active_sweep %}
+        <!-- Active sweep status -->
         <div class="card shadow-sm mb-4">
-            <div class="card-header bg-success-subtle">
+            <div class="card-header bg-primary-subtle">
+                <h5 class="card-title mb-0">Active Parameter Sweep</h5>
+            </div>
+            <div class="card-body" id="active-sweep-container">
+                <h6 class="fw-bold">{{ active_sweep.circuit_type }}</h6>
+                <div class="d-flex flex-column gap-2">
+                    {% if active_sweep.param1 %}
+                    <span class="badge bg-success">{{ active_sweep.param1 }}</span>
+                    {% endif %}
+                    {% if active_sweep.param2 %}
+                    <span class="badge bg-info text-dark">{{ active_sweep.param2 }}</span>
+                    {% endif %}
+                </div>
+                <div class="mt-3">
+                    <div class="progress" style="height: 20px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" 
+                             style="width: {{ active_sweep.progress }}%;" 
+                             aria-valuenow="{{ active_sweep.progress }}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                            {{ active_sweep.progress }}%
+                        </div>
+                    </div>
+                    <p class="text-center mt-2">
+                        {{ active_sweep.completed }} of {{ active_sweep.total }} simulations completed
+                    </p>
+                </div>
+                <div class="d-grid mt-3">
+                    <a href="{{ url_for('view_sweep_grid', sweep_session=active_sweep.session_id) }}" 
+                       class="btn btn-outline-primary">
+                        <i class="bi bi-grid-3x3-gap"></i> View Current Results
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Completed sweep sessions -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-success-subtle d-flex justify-content-between align-items-center">
                 <h5 class="card-title mb-0">Completed Sweep Sessions</h5>
+                <button class="btn btn-sm btn-outline-success" id="refresh-sweeps-btn">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
             </div>
             <div class="card-body p-0" id="sweep-sessions-container">
-                <div class="text-center py-3">
+                <div class="text-center py-3" id="loading-indicator">
                     <div class="spinner-border spinner-border-sm text-primary" role="status">
                         <span class="visually-hidden">Loading sweep sessions...</span>
                     </div>
@@ -427,4 +472,159 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Set up the parameter range toggles
+        setupParameterToggles();
+        
+        // Set up auto-refresh for active sweep (if there is one)
+        setupActiveSweepRefresh();
+        
+        // Load the list of sweep sessions
+        loadSweepSessions();
+        
+        // Set up refresh button
+        const refreshBtn = document.getElementById('refresh-sweeps-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', function() {
+                loadSweepSessions();
+            });
+        }
+    });
+    
+    function setupParameterToggles() {
+        // Add event listeners for sweep toggles
+        document.querySelectorAll('.sweep-toggle').forEach(function(checkbox) {
+            checkbox.addEventListener('change', function() {
+                const paramName = this.name.replace('sweep_', '');
+                const paramRow = this.closest('.param-row');
+                
+                // Find the range controls and fixed input
+                const rangeControls = paramRow.querySelector('.range-controls');
+                const fixedInput = paramRow.querySelector('.fixed-input input');
+                
+                if (this.checked) {
+                    rangeControls.classList.remove('d-none');
+                    fixedInput.disabled = true;
+                } else {
+                    rangeControls.classList.add('d-none');
+                    fixedInput.disabled = false;
+                }
+                
+                updateCombinationCount();
+            });
+        });
+    }
+    
+    function setupActiveSweepRefresh() {
+        {% if active_sweep %}
+        // Set interval to refresh active sweep status every 5 seconds
+        const refreshInterval = setInterval(function() {
+            fetch('/parameter_sweep?active_sweep={{ active_sweep.session_id }}&format=json')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.active_sweep) {
+                        updateActiveSweepStatus(data.active_sweep);
+                        
+                        // If sweep is complete, stop refreshing and reload sweep list
+                        if (data.active_sweep.completed >= data.active_sweep.total) {
+                            clearInterval(refreshInterval);
+                            loadSweepSessions();
+                        }
+                    }
+                })
+                .catch(err => console.error("Error refreshing sweep status:", err));
+        }, 5000);
+        {% endif %}
+    }
+    
+    function updateActiveSweepStatus(sweepInfo) {
+        // Update progress bar
+        const progressBar = document.querySelector('.progress-bar');
+        if (progressBar) {
+            progressBar.style.width = sweepInfo.progress + '%';
+            progressBar.setAttribute('aria-valuenow', sweepInfo.progress);
+            progressBar.textContent = sweepInfo.progress + '%';
+        }
+        
+        // Update completion text
+        const completionText = document.querySelector('#active-sweep-container p.text-center');
+        if (completionText) {
+            completionText.textContent = `${sweepInfo.completed} of ${sweepInfo.total} simulations completed`;
+        }
+    }
+    
+    function loadSweepSessions() {
+        const container = document.getElementById('sweep-sessions-container');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        
+        if (!container) return;
+        
+        fetch('/api/sweep_sessions')
+            .then(response => response.json())
+            .then(data => {
+                // Hide loading spinner
+                if (loadingIndicator) {
+                    loadingIndicator.style.display = 'none';
+                }
+                
+                // If no sessions, show empty message
+                if (!data || data.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-3">
+                            <i class="bi bi-grid-3x3-gap text-secondary" style="font-size: 2rem;"></i>
+                            <p class="mt-2">No parameter sweeps found.</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Create HTML for all sweep sessions
+                let html = '<div class="list-group list-group-flush">';
+                
+                data.forEach(session => {
+                    let paramBadges = '';
+                    if (session.param1) {
+                        paramBadges += `<span class="badge bg-success me-1">${session.param1}</span>`;
+                    }
+                    if (session.param2) {
+                        paramBadges += `<span class="badge bg-info text-dark me-1">${session.param2}</span>`;
+                    }
+                    
+                    html += `
+                        <a href="/sweep_grid/${session.session_id}" class="list-group-item list-group-item-action">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="fw-bold">${session.circuit_type}</div>
+                                    <small class="text-muted">${session.created_at}</small>
+                                    <div class="mt-1">${paramBadges}</div>
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    <span class="badge bg-primary rounded-pill me-2">${session.simulation_count} sim(s)</span>
+                                    <i class="bi bi-grid-3x3-gap"></i>
+                                </div>
+                            </div>
+                        </a>
+                    `;
+                });
+                
+                html += '</div>';
+                container.innerHTML = html;
+            })
+            .catch(error => {
+                console.error('Error loading sweep sessions:', error);
+                if (loadingIndicator) {
+                    loadingIndicator.style.display = 'none';
+                }
+                container.innerHTML = `
+                    <div class="alert alert-danger m-3">
+                        Failed to load sweep sessions.
+                    </div>
+                `;
+            });
+    }
+</script>
 {% endblock %}
