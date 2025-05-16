@@ -22,6 +22,8 @@ from utils import ensure_dependencies
 from quantum_circuits import get_circuit_generator
 from simulation import run_parameter_scan, generate_parameter_grid
 from visualization import plot_circuit_diagram
+# Import database models
+from models import db, User, SimulationResult, ParameterSweep
 
 # Import Flask web application
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
@@ -422,7 +424,11 @@ def parameter_sweep():
     now = datetime.datetime.now()
     
     # Get list of completed parameter sweeps
-    completed_sweeps = ParameterSweep.query.filter_by(status="completed").order_by(ParameterSweep.created_at.desc()).limit(5).all()
+    try:
+        completed_sweeps = ParameterSweep.query.filter_by(status="completed").order_by(ParameterSweep.created_at.desc()).limit(5).all()
+    except Exception as e:
+        print(f"Error fetching completed sweeps: {e}")
+        completed_sweeps = []
     
     # Check if we have an active sweep
     active_sweep = request.args.get('active_sweep')
@@ -471,17 +477,8 @@ def parameter_sweep():
             print(f"Error getting active sweep info: {str(e)}")
             traceback.print_exc()
     
-    # Get list of completed sweep sessions
-    completed_sweeps = []
-    try:
-        # Get distinct sweep sessions
-        sweep_query = db.session.query(
-            SimulationResult.sweep_session,
-            func.count(SimulationResult.id).label('count'),
-            func.min(SimulationResult.created_at).label('created_at'),
-            func.max(SimulationResult.circuit_type).label('circuit_type')
-        ).filter(
-            SimulationResult.sweep_session != None
+    # We now use the ParameterSweep table for completed sweeps, so this section is no longer needed
+    # The completed_sweeps are now fetched from the ParameterSweep model
         ).group_by(
             SimulationResult.sweep_session
         ).order_by(
