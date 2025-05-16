@@ -38,6 +38,14 @@ def save_simulation_to_db(result, result_name):
         sim_result.drive_param = convert_numpy_type(params.get('drive_param', 0.0))
         sim_result.init_state = params.get('init_state', '')
         
+        # Add parameter sweep tracking
+        sim_result.sweep_session = params.get('sweep_session')
+        sim_result.sweep_index = convert_numpy_type(params.get('sweep_index'))
+        sim_result.sweep_param1 = params.get('sweep_param1')
+        sim_result.sweep_param2 = params.get('sweep_param2')
+        sim_result.sweep_value1 = convert_numpy_type(params.get('sweep_value1'))
+        sim_result.sweep_value2 = convert_numpy_type(params.get('sweep_value2'))
+        
         sim_result.drive_frequency = convert_numpy_type(analysis.get('drive_frequency', 0.0))
         sim_result.time_crystal_detected = convert_numpy_type(analysis.get('has_subharmonics', False))
         sim_result.incommensurate_count = convert_numpy_type(fc_analysis.get('incommensurate_peak_count', 0))

@@ -28,6 +28,8 @@ from visualization import plot_expectation_values, plot_fft_analysis, plot_frequ
 def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
                   time_points=100, max_time=10.0, drive_param=0.9,
                   init_state='superposition', param_set_name='default',
+                  sweep_session=None, sweep_index=None, sweep_param1=None, 
+                  sweep_value1=None, sweep_param2=None, sweep_value2=None,
                   save_results=True, show_plots=False, aer_method='statevector',
                   plot_circuit=True, verbose=True, progress_callback=None, 
                   seed=None):
