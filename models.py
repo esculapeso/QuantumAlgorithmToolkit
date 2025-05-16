@@ -127,3 +127,36 @@ class CombStructure(db.Model):
     def __repr__(self):
         comb_type = "Logarithmic" if self.is_logarithmic else "Linear"
         return f"<{comb_type}Comb {self.base_frequency:.4f}Hz+{self.spacing:.4f} in {self.component}>"
+
+
+class ParameterSweep(db.Model):
+    """Stores information about parameter sweeps."""
+    __tablename__ = 'parameter_sweeps'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    name = db.Column(db.String(255), nullable=True)
+    circuit_type = db.Column(db.String(50), nullable=False)
+    
+    # Parameters being swept
+    param1_name = db.Column(db.String(50), nullable=True)
+    param2_name = db.Column(db.String(50), nullable=True)
+    
+    # Metadata
+    total_simulations = db.Column(db.Integer, default=0)
+    completed_simulations = db.Column(db.Integer, default=0)
+    status = db.Column(db.String(20), default="running")  # running, completed, failed
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    
+    def __repr__(self):
+        param_info = []
+        if self.param1_name:
+            param_info.append(self.param1_name)
+        if self.param2_name:
+            param_info.append(self.param2_name)
+        param_str = ", ".join(param_info) if param_info else "No parameters"
+        
+        return f"<ParameterSweep '{self.session_id}': {self.circuit_type}, {param_str}, {self.completed_simulations}/{self.total_simulations}>"

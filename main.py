@@ -53,7 +53,7 @@ db.init_app(app)
 # Initialize Flask-Login
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = 'login'
+login_manager.login_view = 'login'  # type: ignore
 login_manager.login_message = 'Please log in to access this page.'
 login_manager.login_message_category = 'warning'
 
@@ -84,13 +84,18 @@ with app.app_context():
     db.create_all()
     
     # Check if admin user exists, if not create it
-    admin = User.query.filter_by(username='admin').first()
-    if not admin:
-        admin = User(username='admin', role='admin')
-        admin.set_password('tjhw1951')
-        db.session.add(admin)
-        db.session.commit()
-        print("Admin user created successfully!")
+    try:
+        admin = User.query.filter_by(username='admin').first()
+        if not admin:
+            admin = User()
+            admin.username = 'admin'
+            admin.role = 'admin'
+            admin.set_password('tjhw1951')
+            db.session.add(admin)
+            db.session.commit()
+            print("Admin user created successfully!")
+    except Exception as e:
+        print(f"Error setting up admin user: {e}")
 
 # Define a custom error handler for 500 errors
 @app.errorhandler(500)
@@ -239,7 +244,9 @@ def register():
             return render_template('register.html')
         
         # Create new user
-        new_user = User(username=username, role=role)
+        new_user = User()
+        new_user.username = username
+        new_user.role = role
         new_user.set_password(password)
         
         db.session.add(new_user)
