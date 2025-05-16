@@ -400,6 +400,7 @@ def index():
 @login_required
 def parameter_sweep():
     """Render the parameter sweep page."""
+    from sqlalchemy import func
     # Available circuit types
     circuit_types = [
         {"id": "penrose", "name": "Penrose-inspired Circuit"},

@@ -462,12 +462,37 @@
                 </button>
             </div>
             <div class="card-body p-0" id="sweep-sessions-container">
-                <div class="text-center py-3" id="loading-indicator">
-                    <div class="spinner-border spinner-border-sm text-primary" role="status">
-                        <span class="visually-hidden">Loading sweep sessions...</span>
+                {% if completed_sweeps %}
+                    <ul class="list-group list-group-flush">
+                        {% for sweep in completed_sweeps %}
+                        <li class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="mb-1">{{ sweep.circuit_type }}</h6>
+                                    <p class="small text-muted mb-1">{{ sweep.date }}</p>
+                                    <div>
+                                        {% if sweep.parameters %}
+                                        <span class="badge bg-info">{{ sweep.parameters }}</span>
+                                        {% endif %}
+                                        <span class="badge bg-secondary">{{ sweep.count }} simulations</span>
+                                    </div>
+                                </div>
+                                <a href="{{ url_for('view_sweep_grid', sweep_session=sweep.id) }}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-grid-3x3-gap"></i> View Results
+                                </a>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <div class="text-center py-3" id="loading-indicator">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status">
+                            <span class="visually-hidden">Loading sweep sessions...</span>
+                        </div>
+                        <span class="ms-2">Loading sweep sessions...</span>
                     </div>
-                    <span class="ms-2">Loading sweep sessions...</span>
-                </div>
+                {% endif %}
             </div>
         </div>
     </div>
