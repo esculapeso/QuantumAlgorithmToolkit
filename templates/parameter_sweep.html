@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="row">
-    <div class="col-lg-12">
+    <div class="col-lg-8">
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-primary-subtle">
                 <h5 class="card-title mb-0">Parameter Sweep</h5>
@@ -339,8 +339,90 @@
                                 warningElement.classList.add('d-none');
                             }
                         }
+                        
+                        // Load sweep sessions
+                        loadSweepSessions();
                     });
+                    
+                    // Function to load sweep sessions
+                    function loadSweepSessions() {
+                        fetch('/api/sweep_sessions')
+                            .then(response => response.json())
+                            .then(data => {
+                                const sessionsContainer = document.getElementById('sweep-sessions-container');
+                                if (!sessionsContainer) return;
+                                
+                                if (!data || data.length === 0) {
+                                    sessionsContainer.innerHTML = `
+                                        <div class="text-center py-3">
+                                            <i class="bi bi-grid-3x3-gap text-secondary" style="font-size: 2rem;"></i>
+                                            <p class="mt-2">No parameter sweeps found.</p>
+                                        </div>
+                                    `;
+                                    return;
+                                }
+                                
+                                let sessionsList = '<div class="list-group list-group-flush">';
+                                
+                                data.forEach(session => {
+                                    let paramBadges = '';
+                                    if (session.param1) {
+                                        paramBadges += `<span class="badge bg-success me-1">${session.param1}</span>`;
+                                    }
+                                    if (session.param2) {
+                                        paramBadges += `<span class="badge bg-info text-dark me-1">${session.param2}</span>`;
+                                    }
+                                    
+                                    sessionsList += `
+                                        <a href="/sweep_grid/${session.session_id}" class="list-group-item list-group-item-action">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <div class="fw-bold">${session.circuit_type}</div>
+                                                    <small class="text-muted">${session.created_at}</small>
+                                                    <div class="mt-1">${paramBadges}</div>
+                                                </div>
+                                                <div class="d-flex align-items-center">
+                                                    <span class="badge bg-primary rounded-pill me-2">${session.simulation_count} sim(s)</span>
+                                                    <i class="bi bi-grid-3x3-gap"></i>
+                                                </div>
+                                            </div>
+                                        </a>
+                                    `;
+                                });
+                                
+                                sessionsList += '</div>';
+                                sessionsContainer.innerHTML = sessionsList;
+                            })
+                            .catch(error => {
+                                console.error('Error loading sweep sessions:', error);
+                                const sessionsContainer = document.getElementById('sweep-sessions-container');
+                                if (sessionsContainer) {
+                                    sessionsContainer.innerHTML = `
+                                        <div class="alert alert-danger m-3">
+                                            Failed to load sweep sessions.
+                                        </div>
+                                    `;
+                                }
+                            });
+                    }
                 </script>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Right column for completed sweeps -->
+    <div class="col-lg-4">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-success-subtle">
+                <h5 class="card-title mb-0">Completed Sweep Sessions</h5>
+            </div>
+            <div class="card-body p-0" id="sweep-sessions-container">
+                <div class="text-center py-3">
+                    <div class="spinner-border spinner-border-sm text-primary" role="status">
+                        <span class="visually-hidden">Loading sweep sessions...</span>
+                    </div>
+                    <span class="ms-2">Loading sweep sessions...</span>
+                </div>
             </div>
         </div>
     </div>
