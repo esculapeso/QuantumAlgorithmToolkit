@@ -421,6 +421,9 @@ def parameter_sweep():
     # Current timestamp for default scan name
     now = datetime.datetime.now()
     
+    # Get list of completed parameter sweeps
+    completed_sweeps = ParameterSweep.query.filter_by(status="completed").order_by(ParameterSweep.created_at.desc()).limit(5).all()
+    
     # Check if we have an active sweep
     active_sweep = request.args.get('active_sweep')
     active_sweep_info = None
