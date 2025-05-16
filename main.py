@@ -500,3 +500,220 @@ def api_sweep_sessions():
         print(f"Error in API endpoint: {str(e)}")
         traceback.print_exc()
         return jsonify([]), 500
+        
+@app.route('/run_parameter_sweep', methods=['POST'])
+@login_required
+def run_parameter_sweep():
+    """Run a parameter sweep with the provided parameters."""
+    # Extract base configuration
+    circuit_type = request.form.get('circuit_type')
+    scan_name = request.form.get('scan_name', f'param_sweep_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}')
+    init_state = request.form.get('init_state', 'superposition')
+    
+    # Parameter ranges and steps
+    param_ranges = {}
+    
+    # Process each parameter that could be swept
+    params = [
+        {'name': 'qubits', 'type': int, 'min': 1, 'max': 10},
+        {'name': 'shots', 'type': int, 'min': 1, 'max': 20000},
+        {'name': 'drive_steps', 'type': int, 'min': 1, 'max': 20},
+        {'name': 'time_points', 'type': int, 'min': 1, 'max': 1000},
+        {'name': 'max_time', 'type': float, 'min': 0.1, 'max': 100.0},
+        {'name': 'drive_param', 'type': float, 'min': 0.1, 'max': 10.0}
+    ]
+    
+    # Collect sweep parameters
+    active_params = []
+    for param in params:
+        param_name = param['name']
+        sweep_checkbox = request.form.get(f'sweep_{param_name}')
+        
+        if sweep_checkbox:
+            # This parameter should be swept
+            min_val = request.form.get(f'{param_name}_min')
+            max_val = request.form.get(f'{param_name}_max')
+            steps = request.form.get(f'{param_name}_steps')
+            
+            # Convert to appropriate type
+            try:
+                min_val = param['type'](min_val)
+                max_val = param['type'](max_val)
+                steps = int(steps)
+                
+                # Validate bounds
+                if min_val < param['min']:
+                    min_val = param['min']
+                if max_val > param['max']:
+                    max_val = param['max']
+                if min_val > max_val:
+                    min_val, max_val = max_val, min_val
+                
+                # Store parameter range
+                param_ranges[param_name] = {
+                    'min': min_val,
+                    'max': max_val,
+                    'steps': steps
+                }
+                active_params.append(param_name)
+            except (ValueError, TypeError) as e:
+                flash(f'Invalid value for {param_name}: {e}', 'danger')
+                return redirect(url_for('parameter_sweep'))
+        else:
+            # This parameter has a fixed value
+            value = request.form.get(param_name)
+            if value:
+                try:
+                    value = param['type'](value)
+                    # Validate bounds
+                    if value < param['min']:
+                        value = param['min']
+                    if value > param['max']:
+                        value = param['max']
+                    # Store as a single-value range
+                    param_ranges[param_name] = {
+                        'min': value,
+                        'max': value,
+                        'steps': 1
+                    }
+                except (ValueError, TypeError) as e:
+                    flash(f'Invalid value for {param_name}: {e}', 'danger')
+                    return redirect(url_for('parameter_sweep'))
+    
+    # Check if we have any parameters to sweep
+    if not active_params:
+        flash('Please select at least one parameter to sweep', 'warning')
+        return redirect(url_for('parameter_sweep'))
+    
+    # Generate parameter grid
+    param_grid = generate_parameter_grid(param_ranges)
+    
+    if len(param_grid) > 100:
+        flash(f'Warning: This will generate {len(param_grid)} simulations, which may take a long time.', 'warning')
+    
+    # Create a session ID for this sweep
+    sweep_session = str(uuid.uuid4())
+    
+    # Create a ParameterSweep record in the database
+    try:
+        param_sweep = ParameterSweep()
+        param_sweep.session_id = sweep_session
+        param_sweep.name = scan_name
+        param_sweep.circuit_type = circuit_type
+        
+        # Store primary and secondary parameters
+        if len(active_params) >= 1:
+            param_sweep.param1_name = active_params[0]
+        if len(active_params) >= 2:
+            param_sweep.param2_name = active_params[1]
+            
+        param_sweep.total_simulations = len(param_grid)
+        param_sweep.completed_simulations = 0
+        param_sweep.status = "running"
+        
+        db.session.add(param_sweep)
+        db.session.commit()
+    except Exception as e:
+        print(f"Error creating parameter sweep record: {e}")
+        traceback.print_exc()
+        # Continue without the ParameterSweep record as a fallback
+        
+    # Start the parameter sweep in a background thread
+    thread = threading.Thread(
+        target=run_parameter_scan,
+        args=(circuit_type, param_grid, init_state, sweep_session, scan_name)
+    )
+    thread.daemon = True
+    thread.start()
+    
+    flash(f'Started parameter sweep with {len(param_grid)} simulations.', 'success')
+    return redirect(url_for('parameter_sweep', active_sweep=sweep_session))
+    
+@app.route('/sweep_grid/<session_id>')
+@login_required
+def sweep_grid(session_id):
+    """Show results for a parameter sweep in a grid format."""
+    # Check if the sweep session exists
+    param_sweep = ParameterSweep.query.filter_by(session_id=session_id).first()
+    sweep_info = None
+    
+    if param_sweep:
+        sweep_info = {
+            'id': param_sweep.session_id,
+            'name': param_sweep.name,
+            'circuit_type': param_sweep.circuit_type,
+            'param1': param_sweep.param1_name,
+            'param2': param_sweep.param2_name,
+            'total': param_sweep.total_simulations,
+            'completed': param_sweep.completed_simulations,
+            'status': param_sweep.status,
+            'created_at': param_sweep.created_at.strftime('%Y-%m-%d %H:%M')
+        }
+    else:
+        # Try to reconstruct sweep info from simulation results
+        first_sim = SimulationResult.query.filter_by(sweep_session=session_id).first()
+        if not first_sim:
+            flash('Sweep session not found', 'danger')
+            return redirect(url_for('parameter_sweep'))
+        
+        # Count simulations in this session
+        sim_count = SimulationResult.query.filter_by(sweep_session=session_id).count()
+        
+        sweep_info = {
+            'id': session_id,
+            'name': f"Sweep {session_id[:8]}",
+            'circuit_type': first_sim.circuit_type,
+            'param1': first_sim.sweep_param1,
+            'param2': first_sim.sweep_param2,
+            'total': sim_count,
+            'completed': sim_count,
+            'status': 'completed',
+            'created_at': first_sim.created_at.strftime('%Y-%m-%d %H:%M')
+        }
+    
+    # Get all simulations from this sweep
+    simulations = SimulationResult.query.filter_by(sweep_session=session_id).all()
+    
+    if not simulations:
+        flash('No simulations found for this sweep session', 'warning')
+        return redirect(url_for('parameter_sweep'))
+    
+    # Format simulations for grid display
+    sim_data = []
+    for sim in simulations:
+        # Build a summary of the simulation
+        summary = {
+            'id': sim.id,
+            'result_name': sim.result_name,
+            'time_crystal_detected': sim.time_crystal_detected,
+            'incommensurate_count': sim.incommensurate_count,
+            'linear_combs': sim.linear_combs_detected,
+            'log_combs': sim.log_combs_detected
+        }
+        
+        # Extract parameter values
+        if sweep_info['param1']:
+            if sweep_info['param1'] == sim.sweep_param1:
+                summary['param1_value'] = sim.sweep_value1
+            
+        if sweep_info['param2']:
+            if sweep_info['param2'] == sim.sweep_param2:
+                summary['param2_value'] = sim.sweep_value2
+                
+        sim_data.append(summary)
+    
+    # Get distinct parameter values for each dimension
+    param1_values = sorted(list(set(s['param1_value'] for s in sim_data if 'param1_value' in s)))
+    param2_values = sorted(list(set(s['param2_value'] for s in sim_data if 'param2_value' in s)))
+    
+    if not param1_values:
+        # If no param1 values, set a default
+        param1_values = [None]
+    
+    return render_template('sweep_grid.html',
+                           sweep=sweep_info,
+                           simulations=sim_data,
+                           param1_values=param1_values,
+                           param2_values=param2_values,
+                           param1_label=sweep_info['param1'].replace('_', ' ').title() if sweep_info['param1'] else None,
+                           param2_label=sweep_info['param2'].replace('_', ' ').title() if sweep_info['param2'] else None)
