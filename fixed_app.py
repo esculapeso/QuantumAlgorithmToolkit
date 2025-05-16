@@ -1,20 +1,17 @@
 """
 Fixed application file for the quantum simulation project.
-This file handles all the Flask application setup to ensure proper database integration.
+This file resolves SQLAlchemy initialization issues.
 """
 
 import os
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
-from werkzeug.middleware.proxy_fix import ProxyFix
+from flask_login import LoginManager
 
 # Create base class for SQLAlchemy models
 class Base(DeclarativeBase):
     pass
-
-# Create the SQLAlchemy instance
-db = SQLAlchemy(model_class=Base)
 
 # Create the Flask application
 app = Flask(__name__)
@@ -28,27 +25,42 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True,
 }
 
-# Apply ProxyFix for proper URL generation
-app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
-
-# Initialize the app with SQLAlchemy
+# Create the SQLAlchemy instance AFTER app is configured
+db = SQLAlchemy(model_class=Base)
 db.init_app(app)
 
-# Initialize database tables
+# Import models first
 with app.app_context():
+    import models  # noqa: F401
+
+# Initialize Login Manager 
+login_manager = LoginManager(app)
+login_manager.login_view = 'login'
+login_manager.login_message = 'Please log in to access this page.'
+login_manager.login_message_category = 'warning'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return models.User.query.get(int(user_id))
+
+# Create tables
+with app.app_context():
+    db.create_all()
+    
+    # Create admin user if it doesn't exist
     try:
-        # Import models here to avoid circular imports
-        from models import User, SimulationResult, FrequencyPeak, CombStructure, ParameterSweep
-        db.create_all()
-        print("Database tables created successfully!")
-        
-        # Create admin user if it doesn't exist
+        from models import User
         admin = User.query.filter_by(username='admin').first()
         if not admin:
-            admin = User(username='admin', role='admin')
+            admin = User()
+            admin.username = 'admin'
+            admin.role = 'admin'
             admin.set_password('admin123')
             db.session.add(admin)
             db.session.commit()
             print("Admin user created successfully!")
     except Exception as e:
-        print(f"Error initializing database: {e}")
+        print(f"Error setting up admin user: {e}")
+
+# Import all routes AFTER the app and models are fully initialized
+import routes

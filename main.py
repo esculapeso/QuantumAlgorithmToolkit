@@ -32,7 +32,7 @@ from functools import wraps
 from flask_login import LoginManager, login_user, logout_user, current_user, login_required
 
 # Import Flask app
-from working_app import app
+from app import app
 
 # Initialize Flask-Login
 login_manager = LoginManager()
