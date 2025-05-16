@@ -1,51 +1,40 @@
 """
-Main module for quantum simulation package.
-Entry point for running simulations with different parameters and web interface.
+Fixed main application for quantum simulation.
+This file will work correctly with the application setup.
 """
 
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
+from flask_login import LoginManager, login_user, logout_user, current_user, login_required
 import os
-import sys
 import numpy as np
 import datetime
+import json
 import traceback
 import threading
 import uuid
-import time
-import matplotlib.pyplot as plt
+import glob
+from functools import wraps
 
-# Import custom modules
+# Import our app and db from fixed_app.py
+from fixed_app import app, db
+
+# Import necessary modules for simulation
 import config
 from utils import ensure_dependencies
 from quantum_circuits import get_circuit_generator
-from simulation import run_simulation, run_parameter_scan, generate_parameter_grid
-from visualization import plot_circuit_diagram
-# Import database models
-from models import db, User, SimulationResult, ParameterSweep
-
-# Import Flask web application
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
-import glob
-import json
-from functools import wraps
-
-# Import Flask-Login for user management
-from flask_login import LoginManager, login_user, logout_user, current_user, login_required
-
-# Import Flask app
-from working_app import app
+from simulation import run_simulation
+from models import User, SimulationResult, ParameterSweep
 
 # Initialize Flask-Login
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'  # type: ignore
 login_manager.login_message = 'Please log in to access this page.'
-login_manager.login_message_category = 'warning'
 
 @login_manager.unauthorized_handler
 def unauthorized():
     """Handle unauthorized access attempts."""
     flash('You must be logged in to access this page.', 'warning')
-    # Store the page the user was trying to access in the session
     session['next_url'] = request.url if request.method == 'GET' else None
     return redirect(url_for('login'))
 
@@ -63,85 +52,20 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# Create database tables and admin user if they don't exist
-with app.app_context():
-    # Check if admin user exists, if not create it
-    try:
-        admin = User.query.filter_by(username='admin').first()
-        if not admin:
-            admin = User()
-            admin.username = 'admin'
-            admin.role = 'admin'
-            admin.set_password('admin123')
-            db.session.add(admin)
-            db.session.commit()
-            print("Admin user created successfully!")
-    except Exception as e:
-        print(f"Error setting up admin user: {e}")
-
 # Error handlers
 @app.errorhandler(500)
 def internal_server_error(error):
-    """Custom error handler for 500 errors to ensure API routes still return JSON."""
+    """Custom error handler for 500 errors."""
     if request.path.startswith('/api/'):
         return jsonify({"error": "Internal server error", "message": str(error)}), 500
     return render_template('error.html', error=error), 500
 
 @app.errorhandler(404)
 def page_not_found(error):
-    """Custom error handler for 404 errors to ensure API routes still return JSON."""
+    """Custom error handler for 404 errors."""
     if request.path.startswith('/api/'):
-        return jsonify({"error": "Not found", "message": "The requested resource was not found"}), 404
+        return jsonify({"error": "Not found"}), 404
     return render_template('error.html', error="Page not found"), 404
-
-@app.errorhandler(Exception)
-def handle_exception(error):
-    """Custom error handler to catch unhandled exceptions and ensure API routes return JSON."""
-    print("Unhandled exception:", str(error))
-    traceback.print_exc()
-    
-    if request.path.startswith('/api/'):
-        return jsonify({"error": "An unexpected error occurred", "message": str(error)}), 500
-        
-    return render_template('error.html', error=error), 500
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    """User login route."""
-    if current_user.is_authenticated:
-        return redirect(url_for('index'))
-        
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        if not username or not password:
-            flash('Please provide both username and password.', 'danger')
-            return render_template('login.html')
-        
-        user = User.query.filter_by(username=username).first()
-        
-        if user and user.check_password(password):
-            login_user(user)
-            
-            # Redirect to the page they were trying to access
-            next_url = session.pop('next_url', None)
-            if next_url:
-                return redirect(next_url)
-                
-            return redirect(url_for('dashboard'))
-        else:
-            flash('Invalid username or password.', 'danger')
-    
-    return render_template('login.html')
-
-@app.route('/logout')
-@login_required
-def logout():
-    """User logout route."""
-    logout_user()
-    flash('You have been logged out.', 'info')
-    return redirect(url_for('login'))
 
 @app.route('/')
 def index():
@@ -180,31 +104,6 @@ def index():
                           incommensurate_count=incommensurate_count,
                           circuit_types=circuit_types,
                           default_params=config.DEFAULT_SIMULATION_PARAMS)
-                          
-@app.route('/dashboard')
-@login_required
-def dashboard():
-    """Render the dashboard page."""
-    # Get recent simulations
-    from db_utils import get_recent_simulations
-    recent_simulations = get_recent_simulations(limit=10)
-    
-    # Format simulation results for display
-    sim_results = []
-    for sim in recent_simulations:
-        sim_results.append({
-            'id': sim.id,
-            'name': sim.result_name,
-            'circuit_type': sim.circuit_type,
-            'qubits': sim.qubits,
-            'created_at': sim.created_at.strftime('%Y-%m-%d %H:%M'),
-            'time_crystal': sim.time_crystal_detected,
-            'incommensurate': sim.incommensurate_count,
-            'comb_detected': sim.linear_combs_detected or sim.log_combs_detected,
-            'is_starred': sim.is_starred
-        })
-    
-    return render_template('dashboard_new.html', simulations=sim_results)
 
 @app.route('/run_sim', methods=['POST'])
 def run_sim():
@@ -251,9 +150,6 @@ def run_sim():
         result_name = f"{circuit_type}_{qubits}q_{timestamp}"
         
         print(f"Starting simulation with circuit_type={circuit_type}, qubits={qubits}")
-        
-        # Import simulation directly here to avoid circular imports
-        from simulation import run_simulation
         
         # Run the simulation
         result = run_simulation(
@@ -383,6 +279,31 @@ def get_figure(result_name, figure_name):
         print(f"Error retrieving figure: {str(e)}")
         return "Error retrieving figure", 500
 
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    """Render the dashboard page."""
+    # Get recent simulations
+    from db_utils import get_recent_simulations
+    recent_simulations = get_recent_simulations(limit=10)
+    
+    # Format simulation results for display
+    sim_results = []
+    for sim in recent_simulations:
+        sim_results.append({
+            'id': sim.id,
+            'name': sim.result_name,
+            'circuit_type': sim.circuit_type,
+            'qubits': sim.qubits,
+            'created_at': sim.created_at.strftime('%Y-%m-%d %H:%M'),
+            'time_crystal': sim.time_crystal_detected,
+            'incommensurate': sim.incommensurate_count,
+            'comb_detected': sim.linear_combs_detected or sim.log_combs_detected,
+            'is_starred': sim.is_starred
+        })
+    
+    return render_template('dashboard_new.html', simulations=sim_results)
+
 @app.route('/toggle_star/<int:sim_id>', methods=['POST'])
 @login_required
 def toggle_star(sim_id):
@@ -400,88 +321,43 @@ def toggle_star(sim_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/simulations')
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """User login route."""
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+        
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        if not username or not password:
+            flash('Please provide both username and password.', 'danger')
+            return render_template('login.html')
+        
+        user = User.query.filter_by(username=username).first()
+        
+        if user and user.check_password(password):
+            login_user(user)
+            
+            # Redirect to the page they were trying to access
+            next_url = session.pop('next_url', None)
+            if next_url:
+                return redirect(next_url)
+                
+            return redirect(url_for('dashboard'))
+        else:
+            flash('Invalid username or password.', 'danger')
+    
+    return render_template('login.html')
+
+@app.route('/logout')
 @login_required
-def simulations():
-    """Show a list of all simulations with filter options."""
-    # Get filter parameters from query string
-    circuit_type = request.args.get('circuit_type')
-    min_qubits = request.args.get('min_qubits')
-    max_qubits = request.args.get('max_qubits')
-    time_crystal = request.args.get('time_crystal')
-    comb_detected = request.args.get('comb_detected')
-    is_starred = request.args.get('is_starred')
-    
-    # Convert string parameters to appropriate types
-    if min_qubits:
-        try:
-            min_qubits = int(min_qubits)
-        except ValueError:
-            min_qubits = None
-    
-    if max_qubits:
-        try:
-            max_qubits = int(max_qubits)
-        except ValueError:
-            max_qubits = None
-    
-    if time_crystal:
-        time_crystal = time_crystal.lower() == 'true'
-    else:
-        time_crystal = None
-    
-    if comb_detected:
-        comb_detected = comb_detected.lower() == 'true'
-    else:
-        comb_detected = None
-    
-    if is_starred:
-        is_starred = is_starred.lower() == 'true'
-    else:
-        is_starred = None
-    
-    # Search simulations with filters
-    from db_utils import search_simulations
-    simulations = search_simulations(
-        circuit_type=circuit_type,
-        min_qubits=min_qubits,
-        max_qubits=max_qubits,
-        time_crystal_detected=time_crystal,
-        comb_detected=comb_detected,
-        is_starred=is_starred
-    )
-    
-    # Format simulation results for display
-    sim_results = []
-    for sim in simulations:
-        sim_results.append({
-            'id': sim.id,
-            'name': sim.result_name,
-            'circuit_type': sim.circuit_type,
-            'qubits': sim.qubits,
-            'drive_param': sim.drive_param,
-            'created_at': sim.created_at.strftime('%Y-%m-%d %H:%M'),
-            'time_crystal': sim.time_crystal_detected,
-            'incommensurate': sim.incommensurate_count,
-            'comb_detected': sim.linear_combs_detected or sim.log_combs_detected,
-            'is_starred': sim.is_starred
-        })
-    
-    # Get unique circuit types for filter dropdown
-    circuit_types = db.session.query(SimulationResult.circuit_type).distinct().all()
-    circuit_types = [ct[0] for ct in circuit_types]
-    
-    return render_template('simulations.html', 
-                          simulations=sim_results,
-                          circuit_types=circuit_types,
-                          filters={
-                              'circuit_type': circuit_type,
-                              'min_qubits': min_qubits,
-                              'max_qubits': max_qubits,
-                              'time_crystal': time_crystal,
-                              'comb_detected': comb_detected,
-                              'is_starred': is_starred
-                          })
+def logout():
+    """User logout route."""
+    logout_user()
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('login'))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
