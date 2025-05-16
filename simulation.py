@@ -19,6 +19,177 @@ from qiskit.quantum_info import Statevector
 # which has proper fallback handling
 from quantum_circuits import AerSimulator
 
+def run_parameter_scan(circuit_type, param_grid, init_state, sweep_session, scan_name):
+    """
+    Run a parameter sweep across a grid of parameter values.
+    
+    Args:
+        circuit_type (str): The circuit type to use
+        param_grid (list): List of parameter dictionaries, each containing a unique combo
+        init_state (str): Initial state for simulations
+        sweep_session (str): Unique ID for this sweep session
+        scan_name (str): Human-readable name for this sweep
+    """
+    print(f"Starting parameter sweep with {len(param_grid)} combinations")
+    
+    # Import needed modules
+    import config
+    from models import db, ParameterSweep
+    import traceback
+    
+    # Track active sweep parameters
+    active_params = set()
+    for params in param_grid:
+        active_params.update(params.keys())
+    active_params = list(active_params)
+    
+    # Sort parameters to ensure consistent param1/param2 assignment
+    active_params.sort()
+    
+    # Determine primary and secondary sweep parameters
+    param1 = active_params[0] if len(active_params) > 0 else None
+    param2 = active_params[1] if len(active_params) > 1 else None
+    
+    # Run each simulation with the specified parameters
+    for i, params in enumerate(param_grid):
+        # Extract parameter values
+        param1_val = params.get(param1) if param1 else None
+        param2_val = params.get(param2) if param2 else None
+        
+        # Run the simulation with these parameters
+        try:
+            # Check if a simulation with these parameters already exists
+            from db_utils import find_existing_simulation
+            
+            existing_sim = find_existing_simulation(
+                circuit_type=circuit_type,
+                qubits=params.get('qubits', config.DEFAULT_SIMULATION_PARAMS['qubits']),
+                shots=params.get('shots', config.DEFAULT_SIMULATION_PARAMS['shots']),
+                drive_steps=params.get('drive_steps', config.DEFAULT_SIMULATION_PARAMS['drive_steps']),
+                time_points=params.get('time_points', config.DEFAULT_SIMULATION_PARAMS['time_points']),
+                max_time=params.get('max_time', config.DEFAULT_SIMULATION_PARAMS['max_time']),
+                drive_param=params.get('drive_param', config.DEFAULT_SIMULATION_PARAMS['drive_param']),
+                init_state=init_state
+            )
+            
+            if existing_sim:
+                print(f"Found existing simulation for parameter set {i+1}/{len(param_grid)}")
+                
+                # Update the existing simulation to be part of this sweep
+                existing_sim.sweep_session = sweep_session
+                existing_sim.sweep_index = i
+                existing_sim.sweep_param1 = param1
+                existing_sim.sweep_value1 = param1_val
+                existing_sim.sweep_param2 = param2
+                existing_sim.sweep_value2 = param2_val
+                
+                db.session.commit()
+                
+                # Update progress in the ParameterSweep record
+                try:
+                    param_sweep = ParameterSweep.query.filter_by(session_id=sweep_session).first()
+                    if param_sweep:
+                        param_sweep.completed_simulations += 1
+                        if param_sweep.completed_simulations >= param_sweep.total_simulations:
+                            param_sweep.status = "completed"
+                        db.session.commit()
+                except Exception as e:
+                    print(f"Error updating parameter sweep record: {e}")
+                    traceback.print_exc()
+                
+                continue
+            
+            # Format parameter set name with the current index
+            param_set_name = f"{scan_name}_{i+1:03d}"
+            
+            # Run the simulation and get the result
+            result = run_simulation(
+                circuit_type=circuit_type,
+                qubits=params.get('qubits', config.DEFAULT_SIMULATION_PARAMS['qubits']),
+                shots=params.get('shots', config.DEFAULT_SIMULATION_PARAMS['shots']),
+                drive_steps=params.get('drive_steps', config.DEFAULT_SIMULATION_PARAMS['drive_steps']),
+                time_points=params.get('time_points', config.DEFAULT_SIMULATION_PARAMS['time_points']),
+                max_time=params.get('max_time', config.DEFAULT_SIMULATION_PARAMS['max_time']),
+                drive_param=params.get('drive_param', config.DEFAULT_SIMULATION_PARAMS['drive_param']),
+                init_state=init_state,
+                param_set_name=param_set_name,
+                save_results=True,
+                show_plots=False,
+                plot_circuit=(i==0),  # Only plot circuit for first simulation
+                verbose=True,
+                sweep_session=sweep_session,
+                sweep_index=i,
+                sweep_param1=param1,
+                sweep_value1=param1_val,
+                sweep_param2=param2,
+                sweep_value2=param2_val
+            )
+            
+            print(f"Completed simulation {i+1}/{len(param_grid)}")
+            
+            # Update progress in the ParameterSweep record
+            try:
+                param_sweep = ParameterSweep.query.filter_by(session_id=sweep_session).first()
+                if param_sweep:
+                    param_sweep.completed_simulations += 1
+                    if param_sweep.completed_simulations >= param_sweep.total_simulations:
+                        param_sweep.status = "completed"
+                    db.session.commit()
+            except Exception as e:
+                print(f"Error updating parameter sweep record: {e}")
+                traceback.print_exc()
+            
+        except Exception as e:
+            print(f"Error in simulation {i+1}: {e}")
+            traceback.print_exc()
+    
+    print(f"Parameter sweep completed: {len(param_grid)} simulations")
+
+def generate_parameter_grid(param_ranges):
+    """
+    Generate a grid of parameter combinations based on specified ranges.
+    
+    Args:
+        param_ranges (dict): Dictionary where keys are parameter names and values are
+                           dictionaries with 'min', 'max', and 'steps' keys.
+    
+    Returns:
+        list: List of parameter dictionaries, each containing a unique combination of parameters.
+    """
+    # For each parameter, generate a list of values
+    param_values = {}
+    for param_name, range_info in param_ranges.items():
+        min_val = range_info['min']
+        max_val = range_info['max']
+        steps = range_info['steps']
+        
+        if min_val == max_val:
+            # Single value parameter (not being swept)
+            param_values[param_name] = [min_val]
+        else:
+            # Generate evenly spaced values
+            if isinstance(min_val, int) and isinstance(max_val, int):
+                # For integer parameters, use linspace and round to integers
+                values = np.linspace(min_val, max_val, steps)
+                param_values[param_name] = [int(round(v)) for v in values]
+            else:
+                # For float parameters, use linspace
+                param_values[param_name] = list(np.linspace(min_val, max_val, steps))
+    
+    # Generate all combinations of parameter values
+    param_names = list(param_values.keys())
+    value_lists = [param_values[name] for name in param_names]
+    
+    # Generate grid of all parameter combinations
+    grid = []
+    for combo in itertools.product(*value_lists):
+        param_dict = {}
+        for i, name in enumerate(param_names):
+            param_dict[name] = combo[i]
+        grid.append(param_dict)
+    
+    return grid
+
 import config
 from utils import is_harmonic_related, format_param, create_folder_structure, setup_gdrive_if_needed, save_to_gdrive
 from quantum_circuits import get_circuit_generator
