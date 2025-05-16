@@ -343,6 +343,32 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
         total_sets = len(parameter_sets)
         print(f"Starting sequential simulation run with {total_sets} parameter combinations")
         
+        # Determine which parameters are being swept
+        swept_params = []
+        for param_name, values in {
+            'qubits': [p.get('qubits') for p in parameter_sets],
+            'time_points': [p.get('time_points') for p in parameter_sets],
+            'drive_param': [p.get('drive_param') for p in parameter_sets],
+            'max_time': [p.get('max_time') for p in parameter_sets],
+            'drive_steps': [p.get('drive_steps') for p in parameter_sets],
+            'shots': [p.get('shots') for p in parameter_sets]
+        }.items():
+            # If we have more than one unique value, the parameter is being swept
+            unique_values = list(set([v for v in values if v is not None]))
+            if len(unique_values) > 1:
+                swept_params.append((param_name, unique_values))
+        
+        # Sort to ensure param1 is always the first parameter being swept
+        swept_params.sort(key=lambda x: len(x[1]), reverse=True)
+        
+        # Limit to at most 2 swept parameters (for grid view)
+        swept_params = swept_params[:2]
+        
+        param1_name = swept_params[0][0] if len(swept_params) > 0 else None
+        param2_name = swept_params[1][0] if len(swept_params) > 1 else None
+        
+        print(f"Sweep parameters: {', '.join([p[0] for p in swept_params])}")
+        
         # Run each simulation independently
         for i, param_set in enumerate(parameter_sets):
             try:
@@ -363,7 +389,7 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
                 
                 # Create a Flask application context for this simulation
                 with app.app_context():
-                    # Run the simulation - each one will be saved to the database automatically
+                    # Run the simulation
                     result = run_simulation(
                         circuit_type=circuit_type,
                         qubits=param_set.get('qubits', 3),
@@ -381,6 +407,27 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
                     # Get the result path for tracking
                     results_path = result.get('results_path', '')
                     result_name = os.path.basename(results_path) if results_path else None
+                    
+                    # Update database record with sweep information
+                    if result.get('db_record'):
+                        try:
+                            db_record = result.get('db_record')
+                            db_record.sweep_session = scan_name
+                            db_record.sweep_index = i + 1
+                            
+                            # Store parameter values being swept
+                            if param1_name:
+                                db_record.sweep_param1 = param1_name
+                                db_record.sweep_value1 = float(param_set.get(param1_name, 0))
+                            
+                            if param2_name:
+                                db_record.sweep_param2 = param2_name
+                                db_record.sweep_value2 = float(param_set.get(param2_name, 0))
+                            
+                            db.session.commit()
+                        except Exception as db_err:
+                            print(f"Error updating sweep metadata in database: {str(db_err)}")
+                    
                     print(f"✓ Completed simulation {i+1}/{total_sets}: {result_name}")
                     
                     # Database saving is already handled in the simulation module
@@ -392,7 +439,13 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
                 traceback.print_exc()
                 # Continue with next simulation regardless of errors
         
-        print(f"✓ Completed all {total_sets} simulations. Each appears in the 'Completed Simulations' list.")
+        # Add a route to the sweep grid
+        sweep_url = url_for('view_sweep_grid', sweep_session=scan_name)
+        print(f"✓ Completed all {total_sets} simulations. View results at: {sweep_url}")
+        
+        # Flash a message with the sweep URL
+        with app.test_request_context('/'):
+            flash(f"Parameter sweep complete! <a href='{sweep_url}' class='alert-link'>View Grid Results</a>", "success")
         
     except Exception as e:
         print(f"Error in sequential simulation run: {str(e)}")

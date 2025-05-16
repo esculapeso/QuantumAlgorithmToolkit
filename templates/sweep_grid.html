@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+
+{% block title %}Parameter Sweep Results - {{ sweep_session }}{% endblock %}
+
+{% block extra_head %}
+<!-- Lightbox for images -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.3/css/lightbox.min.css" rel="stylesheet">
+<style>
+  .grid-container {
+    overflow-x: auto;
+  }
+  
+  .grid-table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+  
+  .grid-table th, .grid-table td {
+    border: 1px solid var(--bs-border-color);
+    padding: 8px;
+    text-align: center;
+  }
+  
+  .grid-table th {
+    background-color: var(--bs-primary-bg-subtle);
+    position: sticky;
+    top: 0;
+  }
+  
+  .grid-thumbnail {
+    cursor: pointer;
+    max-width: 200px;
+    max-height: 150px;
+    transition: transform 0.2s;
+  }
+  
+  .grid-thumbnail:hover {
+    transform: scale(1.05);
+  }
+  
+  .grid-empty {
+    text-align: center;
+    color: var(--bs-secondary);
+  }
+  
+  .grid-header {
+    font-weight: bold;
+    white-space: nowrap;
+  }
+  
+  .params-badge {
+    font-size: 0.8em;
+    margin-right: 5px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-primary-subtle d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">{{ sweep_session_title }}</h5>
+          <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Dashboard
+          </a>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <span class="badge bg-primary">{{ circuit_type }}</span>
+            <span class="badge bg-secondary">{{ simulations|length }} Simulations</span>
+            <span class="badge bg-info text-dark">Created: {{ created_at }}</span>
+            
+            {% if param1 %}
+            <span class="badge bg-success">Parameter 1: {{ param1 }}</span>
+            {% endif %}
+            
+            {% if param2 %}
+            <span class="badge bg-warning text-dark">Parameter 2: {{ param2 }}</span>
+            {% endif %}
+          </div>
+          
+          {% if display_mode == 'single_param' %}
+            <!-- Single parameter sweep - display as list -->
+            <div class="row">
+              {% for sim in simulations %}
+                <div class="col-md-6 col-lg-4 mb-3">
+                  <div class="card h-100">
+                    <div class="card-header bg-light">
+                      <h6 class="mb-0">{{ param1 }}: {{ sim.param1_value }}</h6>
+                    </div>
+                    <div class="card-body d-flex flex-column">
+                      <a href="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
+                         data-lightbox="param-sweep-{{ sweep_session }}"
+                         data-title="{{ circuit_type }} - {{ param1 }}: {{ sim.param1_value }}">
+                        <img src="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
+                             class="img-fluid mb-2 rounded" alt="FFT Analysis">
+                      </a>
+                      <div class="mt-auto">
+                        <div class="d-flex justify-content-between align-items-center">
+                          <span class="badge {% if sim.time_crystal_detected %}bg-success{% else %}bg-secondary{% endif %}">
+                            Time Crystal: {{ 'Yes' if sim.time_crystal_detected else 'No' }}
+                          </span>
+                          <a href="{{ url_for('view_result', result_name=sim.result_name) }}" class="btn btn-sm btn-outline-primary">
+                            View Details
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          
+          {% elif display_mode == 'two_params' %}
+            <!-- Two parameter sweep - display as grid -->
+            <div class="grid-container">
+              <table class="grid-table">
+                <thead>
+                  <tr>
+                    <th class="grid-header">{{ param1 }} \ {{ param2 }}</th>
+                    {% for val2 in param2_values %}
+                      <th class="grid-header">{{ val2 }}</th>
+                    {% endfor %}
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for val1 in param1_values %}
+                    <tr>
+                      <th class="grid-header">{{ val1 }}</th>
+                      {% for val2 in param2_values %}
+                        <td>
+                          {% set sim = grid_lookup.get((val1, val2)) %}
+                          {% if sim %}
+                            <a href="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
+                               data-lightbox="param-sweep-{{ sweep_session }}"
+                               data-title="{{ circuit_type }} - {{ param1 }}: {{ val1 }}, {{ param2 }}: {{ val2 }}">
+                              <img src="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
+                                   class="grid-thumbnail" alt="FFT Analysis">
+                            </a>
+                            <div class="mt-2">
+                              <span class="badge {% if sim.time_crystal_detected %}bg-success{% else %}bg-secondary{% endif %}">
+                                Time Crystal: {{ 'Yes' if sim.time_crystal_detected else 'No' }}
+                              </span>
+                              <a href="{{ url_for('view_result', result_name=sim.result_name) }}" class="btn btn-sm btn-outline-primary mt-1">
+                                View
+                              </a>
+                            </div>
+                          {% else %}
+                            <div class="grid-empty">No data</div>
+                          {% endif %}
+                        </td>
+                      {% endfor %}
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          
+          {% else %}
+            <p>No parameter sweep data available.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Lightbox for images -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.3/js/lightbox.min.js"></script>
+<script>
+  // Lightbox configuration
+  lightbox.option({
+    'resizeDuration': 200,
+    'wrapAround': true,
+    'albumLabel': 'Simulation %1 of %2'
+  });
+</script>
+{% endblock %}
