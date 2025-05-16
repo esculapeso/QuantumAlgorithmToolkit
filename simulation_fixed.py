@@ -1,19 +1,18 @@
 """
-Simulation control module for quantum simulation package.
-Contains functions to run simulations with different parameters.
+Main simulation module for quantum simulation package.
+Contains functions for running quantum simulations and analyzing results.
 """
 
 import os
-import numpy as np
 import sys
-import json
-import datetime
-import traceback
-import pandas as pd
 import time
+import datetime
+import json
+import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 import itertools
+import traceback
 
 # Check if we're running in Google Colab
 IN_COLAB = 'google.colab' in sys.modules
@@ -218,6 +217,31 @@ def run_parameter_scan(circuit_type, parameter_sets, init_state='superposition',
         
     return all_results
 
+def generate_parameter_grid(**param_ranges):
+    """
+    Generate a grid of parameter combinations from ranges.
+    
+    Args:
+        param_ranges: Keyword arguments where keys are parameter names and
+                     values are lists of parameter values to scan.
+    
+    Returns:
+        list: List of parameter dictionaries covering all combinations
+    """
+    param_names = list(param_ranges.keys())
+    param_values = list(param_ranges.values())
+    
+    # Generate all combinations
+    combinations = list(itertools.product(*param_values))
+    
+    # Convert to list of dictionaries
+    param_sets = []
+    for combo in combinations:
+        param_dict = {name: value for name, value in zip(param_names, combo)}
+        param_sets.append(param_dict)
+        
+    return param_sets
+
 def generate_parameter_grid(param_ranges):
     """
     Generate a grid of parameter combinations based on specified ranges.
@@ -280,36 +304,23 @@ def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
                   save_results=True, show_plots=False, aer_method='statevector',
                   plot_circuit=True, verbose=True, progress_callback=None, 
                   seed=None):
+    # Function implementation would go here
+    pass
+
+def convert_numpy_type(value):
     """
-    Run a single quantum simulation with specified parameters.
+    Convert numpy types to Python native types for database compatibility.
     
     Args:
-        circuit_type (str): Type of quantum circuit to use ('penrose', 'qft_basic', etc)
-        qubits (int): Number of qubits in the circuit
-        shots (int): Number of measurement shots in the simulation
-        drive_steps (int): Number of drive sequence repetitions
-        time_points (int): Number of time points to simulate
-        max_time (float): Maximum simulation time
-        drive_param (float): Parameter controlling the drive strength
-        init_state (str): Initial quantum state ('superposition', 'up', 'down', etc.)
-        param_set_name (str): Name for this parameter set (for file naming)
-        sweep_session (str): Session identifier for parameter sweep
-        sweep_index (int): Index of this simulation in a parameter sweep
-        sweep_param1 (str): Name of first parameter being swept
-        sweep_value1 (float/int): Value of first parameter being swept
-        sweep_param2 (str): Name of second parameter being swept
-        sweep_value2 (float/int): Value of second parameter being swept
-        save_results (bool): Whether to save results to disk
-        show_plots (bool): Whether to display plots during simulation
-        aer_method (str): Backend method for Qiskit Aer
-        plot_circuit (bool): Whether to plot the quantum circuit diagram
-        verbose (bool): Whether to print detailed progress information
-        progress_callback (callable): Function to call with progress updates
-        seed (int): Random seed for reproducibility
-    
+        value: The value to convert
+        
     Returns:
-        dict: Dictionary containing simulation results and analysis
+        The converted value as a Python native type
     """
-    
-    # Implementation would go here
-    return {}
+    if isinstance(value, np.integer):
+        return int(value)
+    elif isinstance(value, np.floating):
+        return float(value)
+    elif isinstance(value, np.ndarray):
+        return value.tolist()
+    return value
