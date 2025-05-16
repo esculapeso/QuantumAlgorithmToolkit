@@ -16,6 +16,9 @@ from simple_sim import run_simple_sim, generate_figures
 def register_simple_routes(app):
     """Register the simplified routes with the Flask application."""
     
+    # No custom dashboard route - we'll focus only on individual simulations
+    # This avoids conflicts with existing routes
+    
     @app.route('/run_simple', methods=['POST'])
     def run_simple():
         """Run a simulation with the provided parameters."""
