@@ -1813,39 +1813,29 @@ def view_sweep_grid(sweep_session):
 def list_sweep_sessions():
     """List all parameter sweep sessions."""
     try:
-        # Get all unique sweep sessions
-        sweep_sessions = db.session.query(
-            SimulationResult.sweep_session,
-            SimulationResult.circuit_type,
-            db.func.min(SimulationResult.created_at).label('created_at'),
-            db.func.count(SimulationResult.id).label('simulation_count')
-        ).filter(SimulationResult.sweep_session != None).group_by(
-            SimulationResult.sweep_session, SimulationResult.circuit_type
-        ).order_by(db.desc('created_at')).all()
+        # Use the ParameterSweep model directly
+        from models import ParameterSweep
+        
+        # Get all parameter sweep sessions
+        sweep_sessions = ParameterSweep.query.order_by(ParameterSweep.created_at.desc()).all()
         
         sessions_data = []
-        for session in sweep_sessions:
-            # Get the parameter names for this session
-            param_info = db.session.query(
-                SimulationResult.sweep_param1,
-                SimulationResult.sweep_param2
-            ).filter(SimulationResult.sweep_session == session.sweep_session).first()
+        for sweep in sweep_sessions:
+            # Format parameter names for display
+            param1 = sweep.param1.replace('_', ' ').title() if sweep.param1 else ""
+            param2 = sweep.param2.replace('_', ' ').title() if sweep.param2 else ""
             
-            if param_info:
-                param1 = param_info.sweep_param1.replace('_', ' ').title() if param_info.sweep_param1 else ""
-                param2 = param_info.sweep_param2.replace('_', ' ').title() if param_info.sweep_param2 else ""
-                
-                # Use the circuit type directly
-                circuit_type_name = session.circuit_type
-                
-                sessions_data.append({
-                    'session_id': session.sweep_session,
-                    'circuit_type': circuit_type_name,
-                    'created_at': session.created_at.strftime('%Y-%m-%d %H:%M') if session.created_at else '',
-                    'simulation_count': session.simulation_count,
-                    'param1': param1,
-                    'param2': param2
-                })
+            # Add to results list
+            sessions_data.append({
+                'session_id': sweep.session_id,
+                'circuit_type': sweep.circuit_type,
+                'created_at': sweep.created_at.strftime('%Y-%m-%d %H:%M') if sweep.created_at else '',
+                'simulation_count': sweep.completed_simulations,
+                'total_simulations': sweep.total_simulations,
+                'progress': int((sweep.completed_simulations / sweep.total_simulations * 100) if sweep.total_simulations > 0 else 0),
+                'param1': param1,
+                'param2': param2
+            })
         
         return jsonify(sessions_data)
     except Exception as e:
