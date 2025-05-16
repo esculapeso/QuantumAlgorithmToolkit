@@ -439,13 +439,12 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
                 traceback.print_exc()
                 # Continue with next simulation regardless of errors
         
-        # Add a route to the sweep grid
-        sweep_url = url_for('view_sweep_grid', sweep_session=scan_name)
+        # Create a relative URL for the sweep grid
+        sweep_url = f"/sweep_grid/{scan_name}"
         print(f"✓ Completed all {total_sets} simulations. View results at: {sweep_url}")
         
-        # Flash a message with the sweep URL
-        with app.test_request_context('/'):
-            flash(f"Parameter sweep complete! <a href='{sweep_url}' class='alert-link'>View Grid Results</a>", "success")
+        # Note: We don't need to flash a message here as it would be lost
+        # since this runs in a background thread
         
     except Exception as e:
         print(f"Error in sequential simulation run: {str(e)}")
@@ -1672,7 +1671,8 @@ def view_sweep_grid(sweep_session):
         display_mode = 'two_params' if param2 and len(param2_values) > 0 else 'single_param'
         
         # Create a nice title
-        circuit_type_name = next((ct['name'] for ct in circuit_types if ct['id'] == simulations[0].circuit_type), simulations[0].circuit_type)
+        # Get circuit type name
+        circuit_type_name = simulations[0].circuit_type
         sweep_session_title = f"Parameter Sweep: {circuit_type_name}"
         
         if param1:
@@ -1730,8 +1730,8 @@ def list_sweep_sessions():
                 param1 = param_info.sweep_param1.replace('_', ' ').title() if param_info.sweep_param1 else ""
                 param2 = param_info.sweep_param2.replace('_', ' ').title() if param_info.sweep_param2 else ""
                 
-                # Get a nicer name for the circuit type
-                circuit_type_name = next((ct['name'] for ct in circuit_types if ct['id'] == session.circuit_type), session.circuit_type)
+                # Use the circuit type directly
+                circuit_type_name = session.circuit_type
                 
                 sessions_data.append({
                     'session_id': session.sweep_session,
