@@ -388,6 +388,7 @@ def index():
                           default_params=config.DEFAULT_SIMULATION_PARAMS)
                           
 @app.route('/parameter_sweep')
+@login_required
 def parameter_sweep():
     """Render the parameter sweep page."""
     # Available circuit types
@@ -463,6 +464,7 @@ def parameter_sweep():
                           active_sweep=active_sweep_info)
                           
 @app.route('/run_parameter_sweep', methods=['POST'])
+@login_required
 def run_parameter_sweep():
     """Run a parameter sweep with the provided parameters."""
     # Extract base configuration
@@ -1188,6 +1190,7 @@ def simple_dashboard():
     return render_template('simple_dashboard.html', simulations=simulations)
 
 @app.route('/dashboard')
+@login_required
 def dashboard():
     """Dashboard view with simulations list and preview panel side by side."""
     # Import needed modules
@@ -1510,6 +1513,7 @@ def get_starred_simulations():
         }), 500
 
 @app.route('/result/<result_name>')
+@login_required
 def view_result(result_name):
     """View a specific simulation result."""
     try:
