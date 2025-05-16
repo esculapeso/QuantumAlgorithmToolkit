@@ -27,7 +27,7 @@ def run_parameter_scan(circuit_type, param_grid, init_state=None, sweep_session=
         circuit_type (str): The circuit type to use
         param_grid (list): List of parameter dictionaries
         init_state (str): Initial state for simulations
-        sweep_session (str): Unique ID for this sweep session 
+        sweep_session (str): Unique ID for this sweep session
         scan_name (str): Human-readable name for this sweep
     """
     # Generate sweep session ID if not provided
@@ -579,8 +579,7 @@ def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
                 'mx_comb_found': comb_analysis.get('mx_comb_found', False),
                 'mx_best_omega': comb_analysis.get('mx_best_omega', 0),
                 'mx_num_teeth': comb_analysis.get('mx_num_teeth', 0),
-                'mz_comb_found': comb_analysis.get('mz_comb_found', False),
-                'mz_best_omega': comb_analysis.get('mz_best_omega', 0),
+                'mz_comb_found': comb_analysis.get('mz_best_omega', 0),
                 'mz_num_teeth': comb_analysis.get('mz_num_teeth', 0)
             },
             'log_comb_analysis': {
@@ -733,7 +732,8 @@ def run_parameter_scan(circuit_type, parameter_sets, scan_name='parameter_scan',
         current_params = params.copy()
 
         # Get the active parameters being swept
-        active_params = []
+        ```python
+active_params = []
         for key, value in current_params.items():
             if key not in ['circuit_type', 'init_state', 'param_set_name', 'save_results', 
                          'show_plots', 'aer_method', 'verbose']:
