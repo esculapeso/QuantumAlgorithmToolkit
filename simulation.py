@@ -22,6 +22,11 @@ from quantum_circuits import AerSimulator
 def run_parameter_scan(circuit_type, param_grid, init_state=None, sweep_session=None, scan_name='parameter_scan'):
     """
     Run a parameter sweep across a grid of parameter values.
+    """
+    # Generate sweep session ID if not provided
+    if sweep_session is None:
+        import uuid
+        sweep_session = str(uuid.uuid4())
     
     Args:
         circuit_type (str): The circuit type to use
