@@ -426,6 +426,9 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
         
         print(f"Sweep parameters: {', '.join([p[0] for p in swept_params])}")
         
+        # Use scan_name as the sweep session ID for all simulations in this sweep
+        sweep_session_id = scan_name
+        
         # Run each simulation independently
         for i, param_set in enumerate(parameter_sets):
             try:
