@@ -460,6 +460,54 @@ def parameter_sweep():
             print(f"Error getting active sweep info: {str(e)}")
             traceback.print_exc()
     
+    # Get list of completed sweep sessions
+    completed_sweeps = []
+    try:
+        # Get distinct sweep sessions
+        sweep_query = db.session.query(
+            SimulationResult.sweep_session,
+            func.count(SimulationResult.id).label('count'),
+            func.min(SimulationResult.created_at).label('created_at'),
+            func.max(SimulationResult.circuit_type).label('circuit_type')
+        ).filter(
+            SimulationResult.sweep_session != None
+        ).group_by(
+            SimulationResult.sweep_session
+        ).order_by(
+            func.min(SimulationResult.created_at).desc()
+        ).limit(10)
+        
+        sweep_sessions = sweep_query.all()
+        
+        # Format each sweep session for display
+        for session_id, count, created_at, circuit_type in sweep_sessions:
+            # Skip if this is the active sweep (already shown separately)
+            if session_id == active_sweep:
+                continue
+                
+            # Get parameter information
+            sim = SimulationResult.query.filter_by(sweep_session=session_id).first()
+            if sim:
+                param_text = []
+                if sim.sweep_param1:
+                    param_text.append(sim.sweep_param1.replace('_', ' ').title())
+                if sim.sweep_param2:
+                    param_text.append(sim.sweep_param2.replace('_', ' ').title())
+                
+                date_str = created_at.strftime('%Y-%m-%d %H:%M') if created_at else "Unknown"
+                
+                completed_sweeps.append({
+                    'id': session_id,
+                    'name': session_id,
+                    'date': date_str,
+                    'circuit_type': circuit_type,
+                    'parameters': ", ".join(param_text) if param_text else "Single parameter set",
+                    'count': count
+                })
+    except Exception as e:
+        print(f"Error getting completed sweep sessions: {str(e)}")
+        traceback.print_exc()
+    
     # Check if this is a JSON request for active sweep status
     if request.args.get('format') == 'json' and active_sweep:
         return jsonify({
@@ -470,7 +518,8 @@ def parameter_sweep():
                           circuit_types=circuit_types,
                           now=now,
                           default_params=config.DEFAULT_SIMULATION_PARAMS,
-                          active_sweep=active_sweep_info)
+                          active_sweep=active_sweep_info,
+                          completed_sweeps=completed_sweeps)
                           
 @app.route('/run_parameter_sweep', methods=['POST'])
 @login_required
