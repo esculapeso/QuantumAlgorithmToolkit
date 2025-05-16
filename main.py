@@ -1,7 +1,7 @@
 """
 Entry point to our simplified quantum simulation app.
 """
-from noauth_app import app
+from simple_app import app
 
 # This allows gunicorn to find the application
 application = app
