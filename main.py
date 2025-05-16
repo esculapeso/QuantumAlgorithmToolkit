@@ -317,6 +317,31 @@ def index():
                           circuit_types=circuit_types,
                           default_params=config.DEFAULT_SIMULATION_PARAMS)
                           
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    """Render the dashboard page."""
+    # Get recent simulations
+    from db_utils import get_recent_simulations
+    recent_simulations = get_recent_simulations(limit=10)
+    
+    # Format simulation results for display
+    sim_results = []
+    for sim in recent_simulations:
+        sim_results.append({
+            'id': sim.id,
+            'name': sim.result_name,
+            'circuit_type': sim.circuit_type,
+            'qubits': sim.qubits,
+            'created_at': sim.created_at.strftime('%Y-%m-%d %H:%M'),
+            'time_crystal': sim.time_crystal_detected,
+            'incommensurate': sim.incommensurate_count,
+            'comb_detected': sim.linear_combs_detected or sim.log_combs_detected,
+            'is_starred': sim.is_starred
+        })
+    
+    return render_template('dashboard_new.html', simulations=sim_results)
+
 @app.route('/parameter_sweep')
 @login_required
 def parameter_sweep():
@@ -717,3 +742,259 @@ def sweep_grid(session_id):
                            param2_values=param2_values,
                            param1_label=sweep_info['param1'].replace('_', ' ').title() if sweep_info['param1'] else None,
                            param2_label=sweep_info['param2'].replace('_', ' ').title() if sweep_info['param2'] else None)
+
+@app.route('/run_sim', methods=['POST'])
+@login_required
+def run_sim():
+    """Run a simulation with the provided parameters."""
+    # Extract parameters from form
+    circuit_type = request.form.get('circuit_type')
+    qubits = int(request.form.get('qubits'))
+    shots = int(request.form.get('shots'))
+    drive_steps = int(request.form.get('drive_steps'))
+    time_points = int(request.form.get('time_points'))
+    max_time = float(request.form.get('max_time'))
+    drive_param = float(request.form.get('drive_param'))
+    init_state = request.form.get('init_state', 'superposition')
+    
+    # Get the correct circuit generator
+    try:
+        circuit_generator = get_circuit_generator(circuit_type)
+    except ValueError as e:
+        flash(f"Error: {e}", 'danger')
+        return redirect(url_for('index'))
+    
+    # Check if a simulation with these parameters already exists
+    from db_utils import find_existing_simulation
+    existing_sim = find_existing_simulation(
+        circuit_type=circuit_type,
+        qubits=qubits,
+        shots=shots,
+        drive_steps=drive_steps,
+        time_points=time_points,
+        max_time=max_time,
+        drive_param=drive_param,
+        init_state=init_state
+    )
+    
+    if existing_sim:
+        flash(f'A simulation with these parameters already exists. Viewing existing result.', 'info')
+        return redirect(url_for('view_result', result_name=existing_sim.result_name))
+    
+    # Create a timestamp-based result name
+    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    result_name = f"{circuit_type}_{qubits}q_{timestamp}"
+    
+    # Import simulation directly here to avoid circular imports
+    from simulation import run_simulation
+    
+    # Run the simulation
+    result = run_simulation(
+        circuit_type=circuit_type,
+        qubits=qubits,
+        shots=shots,
+        drive_steps=drive_steps,
+        time_points=time_points,
+        max_time=max_time,
+        drive_param=drive_param,
+        init_state=init_state,
+        param_set_name=result_name,
+        save_results=True,
+        show_plots=False
+    )
+    
+    # Check for errors
+    if result and 'error' in result:
+        flash(f"Simulation error: {result['error']}", 'danger')
+        return redirect(url_for('index'))
+    
+    # Save the result to the database
+    from db_utils import save_simulation_to_db
+    db_record = save_simulation_to_db(result, result_name)
+    
+    # Redirect to the result page
+    return redirect(url_for('view_result', result_name=result_name))
+
+@app.route('/result/<result_name>')
+def view_result(result_name):
+    """View a specific simulation result."""
+    # Get the simulation result from the database
+    from db_utils import get_simulation_by_name
+    simulation = get_simulation_by_name(result_name)
+    
+    if not simulation:
+        flash('Simulation result not found.', 'danger')
+        return redirect(url_for('index'))
+    
+    # Check if figure files exist
+    import os
+    figure_path = os.path.join("figures", result_name)
+    
+    # Check for specific figures
+    figs = {
+        'circuit': os.path.exists(os.path.join(figure_path, 'circuit.png')),
+        'expectation': os.path.exists(os.path.join(figure_path, 'expectation.png')),
+        'fft': os.path.exists(os.path.join(figure_path, 'fft.png')),
+        'fc_peaks': os.path.exists(os.path.join(figure_path, 'fc_peaks.png')),
+        'linear_comb': os.path.exists(os.path.join(figure_path, 'linear_comb.png')),
+        'log_comb': os.path.exists(os.path.join(figure_path, 'log_comb.png'))
+    }
+    
+    # Format the simulation data for display
+    sim_data = {
+        'id': simulation.id,
+        'name': simulation.result_name,
+        'circuit_type': simulation.circuit_type,
+        'qubits': simulation.qubits,
+        'shots': simulation.shots,
+        'drive_steps': simulation.drive_steps,
+        'time_points': simulation.time_points,
+        'max_time': simulation.max_time,
+        'drive_param': simulation.drive_param,
+        'init_state': simulation.init_state,
+        'drive_frequency': simulation.drive_frequency,
+        'time_crystal': simulation.time_crystal_detected,
+        'incommensurate_count': simulation.incommensurate_count,
+        'linear_combs': simulation.linear_combs_detected,
+        'log_combs': simulation.log_combs_detected,
+        'elapsed_time': simulation.elapsed_time,
+        'created_at': simulation.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+        'is_starred': simulation.is_starred
+    }
+    
+    # Get frequency peaks if available
+    peaks = simulation.peaks
+    peak_data = []
+    for peak in peaks:
+        peak_data.append({
+            'frequency': peak.frequency,
+            'amplitude': peak.amplitude,
+            'phase': peak.phase,
+            'component': peak.component,
+            'is_harmonic': peak.is_harmonic,
+            'is_incommensurate': peak.is_incommensurate,
+            'is_comb_tooth': peak.is_comb_tooth
+        })
+    
+    # Get frequency combs if available
+    combs = simulation.combs
+    comb_data = []
+    for comb in combs:
+        comb_data.append({
+            'component': comb.component,
+            'is_logarithmic': comb.is_logarithmic,
+            'base_frequency': comb.base_frequency,
+            'spacing': comb.spacing,
+            'num_teeth': comb.num_teeth
+        })
+    
+    # Get extra data if available
+    extra_data = simulation.get_extra_data() if simulation.extra_data else {}
+    
+    return render_template('result.html', 
+                           simulation=sim_data, 
+                           figures=figs,
+                           peaks=peak_data,
+                           combs=comb_data,
+                           extra_data=extra_data)
+
+@app.route('/figure/<result_name>/<figure_name>')
+def get_figure(result_name, figure_name):
+    """Get a figure file for a result."""
+    # Validate figure name to prevent directory traversal
+    import re
+    if not re.match(r'^[a-zA-Z0-9_]+\.(png|jpg|svg)$', figure_name):
+        return "Invalid figure name", 400
+    
+    # Construct the path to the figure
+    figure_path = os.path.join("figures", result_name, figure_name)
+    
+    # Check if the file exists
+    if not os.path.exists(figure_path):
+        return "Figure not found", 404
+    
+    # Return the file
+    return send_file(figure_path)
+
+@app.route('/toggle_star/<int:sim_id>', methods=['POST'])
+@login_required
+def toggle_star(sim_id):
+    """Toggle the starred status of a simulation."""
+    simulation = SimulationResult.query.get_or_404(sim_id)
+    
+    # Toggle the star status
+    simulation.is_starred = not simulation.is_starred
+    db.session.commit()
+    
+    # Return the new status
+    return jsonify({'is_starred': simulation.is_starred})
+
+@app.route('/simulations')
+@login_required
+def simulations():
+    """Show a list of all simulations with filter options."""
+    # Get filter parameters from request
+    circuit_type = request.args.get('circuit_type')
+    min_qubits = request.args.get('min_qubits', type=int)
+    max_qubits = request.args.get('max_qubits', type=int)
+    time_crystal = request.args.get('time_crystal')
+    comb_detected = request.args.get('comb_detected')
+    starred = request.args.get('starred')
+    
+    # Convert string boolean parameters to Python booleans
+    time_crystal_bool = True if time_crystal == 'true' else None if time_crystal is None else False
+    comb_detected_bool = True if comb_detected == 'true' else None if comb_detected is None else False
+    is_starred = True if starred == 'true' else None if starred is None else False
+    
+    # Search for simulations with the given filters
+    from db_utils import search_simulations
+    simulations = search_simulations(
+        circuit_type=circuit_type,
+        min_qubits=min_qubits,
+        max_qubits=max_qubits,
+        time_crystal_detected=time_crystal_bool,
+        comb_detected=comb_detected_bool,
+        is_starred=is_starred
+    )
+    
+    # Format simulation results for display
+    sim_results = []
+    for sim in simulations:
+        sim_results.append({
+            'id': sim.id,
+            'name': sim.result_name,
+            'circuit_type': sim.circuit_type,
+            'qubits': sim.qubits,
+            'drive_freq': sim.drive_frequency,
+            'time_points': sim.time_points,
+            'created_at': sim.created_at.strftime('%Y-%m-%d %H:%M'),
+            'time_crystal': sim.time_crystal_detected,
+            'incommensurate': sim.incommensurate_count,
+            'comb_detected': sim.linear_combs_detected or sim.log_combs_detected,
+            'is_starred': sim.is_starred
+        })
+    
+    # Available circuit types for filter dropdown
+    circuit_types = [
+        {"id": "penrose", "name": "Penrose-inspired Circuit"},
+        {"id": "qft_basic", "name": "QFT Basic Circuit"},
+        {"id": "comb_generator", "name": "Frequency Comb Generator"},
+        {"id": "comb_twistor", "name": "Twistor-inspired Comb Circuit"},
+        {"id": "graphene_fc", "name": "Graphene Lattice Circuit"},
+        {"id": "string_twistor_fc", "name": "String Twistor Frequency Crystal"}
+    ]
+    
+    return render_template('simulations.html', 
+                           simulations=sim_results, 
+                           circuit_types=circuit_types,
+                           filters={
+                               'circuit_type': circuit_type,
+                               'min_qubits': min_qubits,
+                               'max_qubits': max_qubits,
+                               'time_crystal': time_crystal,
+                               'comb_detected': comb_detected,
+                               'starred': starred
+                           })
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)

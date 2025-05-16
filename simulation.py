@@ -145,7 +145,7 @@ def run_parameter_scan(circuit_type, param_grid, init_state, sweep_session, scan
     
     print(f"Parameter sweep completed: {len(param_grid)} simulations")
 
-def generate_parameter_grid(param_ranges):
+def generate_parameter_grid(param_ranges=None):
     """
     Generate a grid of parameter combinations based on specified ranges.
     
@@ -156,6 +156,9 @@ def generate_parameter_grid(param_ranges):
     Returns:
         list: List of parameter dictionaries, each containing a unique combination of parameters.
     """
+    if param_ranges is None:
+        return []
+        
     # For each parameter, generate a list of values
     param_values = {}
     for param_name, range_info in param_ranges.items():
