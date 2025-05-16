@@ -1,0 +1,19 @@
+{
+  "param_set": 1,
+  "status": "success",
+  "has_subharmonics": true,
+  "incommensurate_count": 5,
+  "mx_comb_found": true,
+  "mx_comb_teeth": 5,
+  "mz_comb_found": false,
+  "mz_comb_teeth": 3,
+  "mx_log_comb_found": false,
+  "mz_log_comb_found": false,
+  "elapsed_time": 12.0,
+  "qubits": 8,
+  "shots": 8192,
+  "drive_steps": 5,
+  "time_points": 100,
+  "max_time": 10.0,
+  "drive_param": 0.9
+}

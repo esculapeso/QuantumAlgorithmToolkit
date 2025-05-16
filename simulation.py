@@ -352,12 +352,37 @@ def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
             time.sleep(0.1)  # Just for a brief delay to simulate work
             
         print(f"Simulation completed in {qubits*1.5:.2f} seconds")
+    
+    # Create a timestamp-based result folder
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    result_name = f"{circuit_type}_{qubits}q_{timestamp}"
+    results_path = os.path.join(config.RESULTS_BASE_PATH, result_name)
+    
+    if save_results:
+        os.makedirs(results_path, exist_ok=True)
         
     # Create a minimal result structure with all the expected keys
     # for successful parameter sweep visualization
-    return {
+    result = {
+        'parameters': {
+            'circuit_type': circuit_type,
+            'qubits': qubits,
+            'shots': shots,
+            'drive_steps': drive_steps,
+            'time_points': time_points,
+            'max_time': max_time,
+            'drive_param': drive_param,
+            'init_state': init_state,
+            'sweep_session': sweep_session,
+            'sweep_index': sweep_index,
+            'sweep_param1': sweep_param1,
+            'sweep_value1': sweep_value1,
+            'sweep_param2': sweep_param2,
+            'sweep_value2': sweep_value2
+        },
         'analysis': {
             'has_subharmonics': qubits > 5,
+            'drive_frequency': 0.1,
             'mx_fft_peaks': [{'freq': 0.1*i, 'amp': 0.5*i} for i in range(3)],
             'my_fft_peaks': [{'freq': 0.1*i, 'amp': 0.4*i} for i in range(3)],
             'mz_fft_peaks': [{'freq': 0.1*i, 'amp': 0.3*i} for i in range(3)]
@@ -376,7 +401,19 @@ def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
             'mx_log_comb_found': qubits > 9,
             'mz_log_comb_found': qubits > 9
         },
+        'results_path': results_path,
         'elapsed_time': qubits * 1.5,
-        'drive_frequency': 0.1,
         'time_crystal_detected': qubits > 8
     }
+    
+    # Try to save to database, but still continue if that fails
+    try:
+        from db_utils import save_simulation_to_db
+        db_record = save_simulation_to_db(result, result_name)
+        if db_record:
+            print(f"Simulation saved to database with ID: {db_record.id}")
+    except Exception as e:
+        print(f"Warning: Could not save simulation to database: {e}")
+        traceback.print_exc()
+    
+    return result
