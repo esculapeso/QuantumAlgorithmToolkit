@@ -1948,5 +1948,163 @@ def list_sweep_sessions():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/export/<result_name>')
+def export_simulation_data(result_name):
+    """
+    Export simulation frequency data as a CSV file.
+    
+    Args:
+        result_name: The name of the simulation result to export
+        
+    Returns:
+        A CSV file containing the simulation's frequency data
+    """
+    try:
+        # Get simulation data from the database
+        from db_utils import get_simulation_by_name
+        simulation = get_simulation_by_name(result_name)
+        
+        if not simulation:
+            # Look for results in the filesystem
+            results_path = os.path.join('results', result_name)
+            if not os.path.exists(results_path):
+                flash(f"Could not find simulation data for {result_name}", "error")
+                return redirect(url_for('dashboard'))
+            
+            # Try to load the results data from JSON
+            data_file = os.path.join(results_path, 'result_data.json')
+            if not os.path.exists(data_file):
+                flash(f"Could not find result data file for {result_name}", "error")
+                return redirect(url_for('dashboard'))
+            
+            with open(data_file, 'r') as f:
+                result_data = json.load(f)
+        else:
+            # Load the results from the simulation record
+            results_path = simulation.results_path
+            data_file = os.path.join(results_path, 'result_data.json')
+            
+            if not os.path.exists(data_file):
+                flash(f"Could not find result data file for {result_name}", "error")
+                return redirect(url_for('dashboard'))
+            
+            with open(data_file, 'r') as f:
+                result_data = json.load(f)
+        
+        # Create CSV file
+        import csv
+        import io
+        
+        # Create a StringIO object to hold the CSV data
+        csv_data = io.StringIO()
+        writer = csv.writer(csv_data)
+        
+        # Write header
+        writer.writerow(['Component', 'Frequency', 'Amplitude', 'Phase', 
+                        'Is Harmonic', 'Is Incommensurate', 'Is Comb Tooth'])
+        
+        # Check if we have analysis data
+        if 'analysis' in result_data:
+            analysis = result_data['analysis']
+            fc_analysis = result_data.get('fc_analysis', {})
+            comb_analysis = result_data.get('comb_analysis', {})
+            
+            # Add X component data
+            if 'mx_frequencies' in analysis and len(analysis['mx_frequencies']) > 0:
+                for i in range(len(analysis['mx_frequencies'])):
+                    freq = analysis['mx_frequencies'][i]
+                    amp = analysis['mx_amplitudes'][i]
+                    phase = analysis['mx_phases'][i]
+                    
+                    # Check flags
+                    is_harmonic = False
+                    is_incommensurate = False
+                    is_comb_tooth = False
+                    
+                    if (fc_analysis and 'mx_harmonic_mask' in fc_analysis and 
+                            i < len(fc_analysis['mx_harmonic_mask'])):
+                        is_harmonic = bool(fc_analysis['mx_harmonic_mask'][i])
+                        
+                    if (fc_analysis and 'mx_incommensurate_mask' in fc_analysis and 
+                            i < len(fc_analysis['mx_incommensurate_mask'])):
+                        is_incommensurate = bool(fc_analysis['mx_incommensurate_mask'][i])
+                        
+                    if (comb_analysis and 'mx_comb_mask' in comb_analysis and 
+                            i < len(comb_analysis['mx_comb_mask'])):
+                        is_comb_tooth = bool(comb_analysis['mx_comb_mask'][i])
+                    
+                    writer.writerow(['X', freq, amp, phase, is_harmonic, is_incommensurate, is_comb_tooth])
+            
+            # Add Y component data
+            if 'my_frequencies' in analysis and len(analysis['my_frequencies']) > 0:
+                for i in range(len(analysis['my_frequencies'])):
+                    freq = analysis['my_frequencies'][i]
+                    amp = analysis['my_amplitudes'][i]
+                    phase = analysis['my_phases'][i]
+                    
+                    # Check flags
+                    is_harmonic = False
+                    is_incommensurate = False
+                    is_comb_tooth = False
+                    
+                    if (fc_analysis and 'my_harmonic_mask' in fc_analysis and 
+                            i < len(fc_analysis['my_harmonic_mask'])):
+                        is_harmonic = bool(fc_analysis['my_harmonic_mask'][i])
+                        
+                    if (fc_analysis and 'my_incommensurate_mask' in fc_analysis and 
+                            i < len(fc_analysis['my_incommensurate_mask'])):
+                        is_incommensurate = bool(fc_analysis['my_incommensurate_mask'][i])
+                        
+                    if (comb_analysis and 'my_comb_mask' in comb_analysis and 
+                            i < len(comb_analysis['my_comb_mask'])):
+                        is_comb_tooth = bool(comb_analysis['my_comb_mask'][i])
+                    
+                    writer.writerow(['Y', freq, amp, phase, is_harmonic, is_incommensurate, is_comb_tooth])
+            
+            # Add Z component data
+            if 'mz_frequencies' in analysis and len(analysis['mz_frequencies']) > 0:
+                for i in range(len(analysis['mz_frequencies'])):
+                    freq = analysis['mz_frequencies'][i]
+                    amp = analysis['mz_amplitudes'][i]
+                    phase = analysis['mz_phases'][i]
+                    
+                    # Check flags
+                    is_harmonic = False
+                    is_incommensurate = False
+                    is_comb_tooth = False
+                    
+                    if (fc_analysis and 'mz_harmonic_mask' in fc_analysis and 
+                            i < len(fc_analysis['mz_harmonic_mask'])):
+                        is_harmonic = bool(fc_analysis['mz_harmonic_mask'][i])
+                        
+                    if (fc_analysis and 'mz_incommensurate_mask' in fc_analysis and 
+                            i < len(fc_analysis['mz_incommensurate_mask'])):
+                        is_incommensurate = bool(fc_analysis['mz_incommensurate_mask'][i])
+                        
+                    if (comb_analysis and 'mz_comb_mask' in comb_analysis and 
+                            i < len(comb_analysis['mz_comb_mask'])):
+                        is_comb_tooth = bool(comb_analysis['mz_comb_mask'][i])
+                    
+                    writer.writerow(['Z', freq, amp, phase, is_harmonic, is_incommensurate, is_comb_tooth])
+        
+        # Move the cursor to the beginning of the StringIO object
+        csv_data.seek(0)
+        
+        # Create a response with the CSV data
+        filename = f"{result_name}_frequency_data.csv"
+        return send_file(
+            csv_data,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=filename
+        )
+    
+    except Exception as e:
+        app.logger.error(f"Error exporting data for {result_name}: {str(e)}")
+        import traceback as tb
+        app.logger.error(tb.format_exc())
+        flash(f"Error exporting data: {str(e)}", "error")
+        return redirect(url_for('dashboard'))
+
 if __name__ == "__main__":
     main()
