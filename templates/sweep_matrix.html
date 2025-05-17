@@ -144,14 +144,83 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ekko-lightbox/5.3.0/ekko-lightbox.min.js"></script>
 <script>
-  $(document).on('click', '[data-toggle="lightbox"]', function(event) {
-    event.preventDefault();
-    $(this).ekkoLightbox({
-      alwaysShowClose: true,
-      showArrows: true
+document.addEventListener('DOMContentLoaded', function() {
+  // Add click events for all lightbox images
+  document.querySelectorAll('[data-toggle="lightbox"]').forEach(function(el) {
+    el.addEventListener('click', function(e) {
+      e.preventDefault();
+      
+      // Create the lightbox
+      const overlay = document.createElement('div');
+      overlay.className = 'lightbox-overlay';
+      overlay.style.position = 'fixed';
+      overlay.style.top = '0';
+      overlay.style.left = '0';
+      overlay.style.width = '100%';
+      overlay.style.height = '100%';
+      overlay.style.backgroundColor = 'rgba(0,0,0,0.9)';
+      overlay.style.display = 'flex';
+      overlay.style.justifyContent = 'center';
+      overlay.style.alignItems = 'center';
+      overlay.style.zIndex = '1050';
+      
+      // Create the image container
+      const imgContainer = document.createElement('div');
+      imgContainer.style.position = 'relative';
+      imgContainer.style.maxWidth = '90%';
+      imgContainer.style.maxHeight = '90%';
+      
+      // Create the image
+      const img = document.createElement('img');
+      img.src = this.getAttribute('href');
+      img.style.maxWidth = '100%';
+      img.style.maxHeight = '90vh';
+      img.style.border = '2px solid #444';
+      img.style.borderRadius = '4px';
+      
+      // Create the close button
+      const closeBtn = document.createElement('button');
+      closeBtn.innerHTML = '&times;';
+      closeBtn.style.position = 'absolute';
+      closeBtn.style.top = '-40px';
+      closeBtn.style.right = '0';
+      closeBtn.style.backgroundColor = 'transparent';
+      closeBtn.style.border = 'none';
+      closeBtn.style.color = 'white';
+      closeBtn.style.fontSize = '30px';
+      closeBtn.style.cursor = 'pointer';
+      
+      // Create the title if provided
+      if (this.getAttribute('data-title')) {
+        const title = document.createElement('div');
+        title.textContent = this.getAttribute('data-title');
+        title.style.color = 'white';
+        title.style.textAlign = 'center';
+        title.style.marginTop = '10px';
+        title.style.fontSize = '16px';
+        imgContainer.appendChild(title);
+      }
+      
+      // Add close functionality
+      closeBtn.addEventListener('click', function() {
+        document.body.removeChild(overlay);
+      });
+      
+      // Allow clicking outside to close
+      overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+          document.body.removeChild(overlay);
+        }
+      });
+      
+      // Assemble and add to DOM
+      imgContainer.appendChild(img);
+      imgContainer.appendChild(closeBtn);
+      overlay.appendChild(imgContainer);
+      document.body.appendChild(overlay);
     });
   });
+});
 </script>
 {% endblock %}

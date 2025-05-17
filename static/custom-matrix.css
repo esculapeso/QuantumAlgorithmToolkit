@@ -1,0 +1,350 @@
+/* Modern Matrix Grid Styling */
+
+:root {
+  --primary-bg: #121212;
+  --card-bg: #1e1e1e; 
+  --card-header: #2d2d2d;
+  --card-border: #333;
+  --accent-blue: #4285f4;
+  --accent-green: #34a853;
+  --accent-yellow: #fbbc05;
+  --accent-red: #ea4335;
+  --text-light: #e0e0e0;
+  --text-dim: #aaa;
+}
+
+body {
+  background-color: var(--primary-bg);
+  color: var(--text-light);
+}
+
+/* Header Section */
+.matrix-header {
+  background: linear-gradient(135deg, #2b2b2b 0%, #1a1a1a 100%);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  padding: 20px;
+  margin-bottom: 30px;
+  border-left: 4px solid var(--accent-blue);
+}
+
+.matrix-title {
+  font-size: 1.8rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.matrix-badge-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.matrix-badge {
+  padding: 8px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+/* Parameter Grid Display */
+.param-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 20px;
+  margin-bottom: 40px;
+}
+
+.param-card {
+  background-color: var(--card-bg);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 1px solid var(--card-border);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+}
+
+.param-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.4);
+}
+
+.param-header {
+  background-color: var(--card-header);
+  padding: 12px;
+  font-weight: 500;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.param-image {
+  padding: 15px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 180px;
+  background-color: #141414;
+}
+
+.param-image img {
+  max-width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+  border-radius: 4px;
+  transition: opacity 0.2s ease;
+}
+
+.param-image img:hover {
+  opacity: 0.9;
+}
+
+.param-footer {
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Matrix Table Style */
+.matrix-table-container {
+  overflow-x: auto;
+  background-color: var(--card-bg);
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+  padding: 2px;
+  border: 1px solid var(--card-border);
+}
+
+.matrix-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 3px;
+  margin: 0;
+}
+
+.matrix-table th {
+  background-color: var(--card-header);
+  color: var(--text-light);
+  padding: 10px 15px;
+  font-weight: 500;
+  text-align: center;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.matrix-table th.row-header {
+  background-color: var(--card-header);
+  width: 80px;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+
+.matrix-table td {
+  padding: 0;
+  background-color: var(--card-bg);
+  border: 1px solid var(--card-border);
+  width: 120px;
+  height: 140px;
+}
+
+.matrix-cell {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.matrix-cell-image {
+  flex: 1;
+  padding: 5px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #141414;
+  min-height: 100px;
+}
+
+.matrix-cell-image img {
+  max-width: 100%;
+  max-height: 100%;
+  transition: transform 0.2s ease;
+}
+
+.matrix-cell-image img:hover {
+  transform: scale(1.05);
+}
+
+.matrix-cell-footer {
+  padding: 5px;
+  text-align: center;
+  background-color: var(--card-header);
+  border-top: 1px solid var(--card-border);
+}
+
+.matrix-cell-footer .badge {
+  font-size: 0.7rem;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.matrix-btn {
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.matrix-btn:hover {
+  transform: scale(1.05);
+}
+
+/* Progress Section */
+.progress-container {
+  background-color: var(--card-bg);
+  border-radius: 8px;
+  padding: 25px;
+  max-width: 700px;
+  margin: 0 auto;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+  border: 1px solid var(--card-border);
+}
+
+.progress-title {
+  color: var(--accent-blue);
+  margin-bottom: 20px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress-title i {
+  font-size: 1.5rem;
+}
+
+.progress-bar-container {
+  height: 10px;
+  border-radius: 10px;
+  background-color: #222;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--accent-blue), var(--accent-green));
+  transition: width 0.5s ease;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 15px;
+}
+
+.progress-action {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--card-header);
+  border: 1px solid var(--card-border);
+  color: var(--text-light);
+  padding: 8px 15px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.refresh-btn:hover {
+  background-color: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+/* Custom Lightbox */
+.lightbox-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0,0,0,0.95);
+  z-index: 1050;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.lightbox-visible {
+  opacity: 1;
+}
+
+.lightbox-container {
+  position: relative;
+  max-width: 90%;
+  max-height: 90%;
+  transform: scale(0.9);
+  transition: transform 0.3s ease;
+}
+
+.lightbox-visible .lightbox-container {
+  transform: scale(1);
+}
+
+.lightbox-image {
+  max-width: 100%;
+  max-height: 90vh;
+  border: 2px solid #444;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.lightbox-close {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 30px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.lightbox-close:hover {
+  transform: scale(1.2);
+}
+
+.lightbox-title {
+  color: white;
+  text-align: center;
+  margin-top: 15px;
+  font-size: 16px;
+  max-width: 100%;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .param-grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+  
+  .matrix-badge-container {
+    flex-direction: column;
+    gap: 5px;
+  }
+  
+  .matrix-table td {
+    width: 100px;
+    height: 120px;
+  }
+}
