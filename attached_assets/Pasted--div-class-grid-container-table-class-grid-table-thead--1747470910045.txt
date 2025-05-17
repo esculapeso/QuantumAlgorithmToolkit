@@ -1,0 +1,134 @@
+<div class="grid-container">
+              <table class="grid-table">
+                <thead>
+                  <tr>
+                    <th class="grid-header">Qubits \ Drive Param</th>
+                    
+                      <th class="grid-header">0.7</th>
+                    
+                      <th class="grid-header">0.9</th>
+                    
+                  </tr>
+                </thead>
+                <tbody>
+                  
+                    <tr>
+                      <th class="grid-header">3.0</th>
+                      
+                        <td>
+                          
+                          
+                            <a href="/figure/graphene_fc_parameter_scan_20250516_3_10q_100tp_d0.9_20250516-222735/fft_analysis.png" data-lightbox="param-sweep-test_grid_sweep_20250516-223155" data-title="graphene_fc - Qubits: 3.0, Drive Param: 0.7">
+                              <img src="/figure/graphene_fc_parameter_scan_20250516_3_10q_100tp_d0.9_20250516-222735/fft_analysis.png" class="grid-thumbnail" alt="FFT Analysis">
+                            </a>
+                            <div class="mt-2">
+                              <span class="badge bg-secondary">
+                                Time Crystal: No
+                              </span>
+                              <a href="/result/graphene_fc_parameter_scan_20250516_3_10q_100tp_d0.9_20250516-222735" class="btn btn-sm btn-outline-primary mt-1">
+                                View
+                              </a>
+                            </div>
+                          
+                        </td>
+                      
+                        <td>
+                          
+                          
+                            <a href="/figure/graphene_fc_parameter_scan_20250516_2_9q_100tp_d0.9_20250516-222721/fft_analysis.png" data-lightbox="param-sweep-test_grid_sweep_20250516-223155" data-title="graphene_fc - Qubits: 3.0, Drive Param: 0.9">
+                              <img src="/figure/graphene_fc_parameter_scan_20250516_2_9q_100tp_d0.9_20250516-222721/fft_analysis.png" class="grid-thumbnail" alt="FFT Analysis">
+                            </a>
+                            <div class="mt-2">
+                              <span class="badge bg-secondary">
+                                Time Crystal: No
+                              </span>
+                              <a href="/result/graphene_fc_parameter_scan_20250516_2_9q_100tp_d0.9_20250516-222721" class="btn btn-sm btn-outline-primary mt-1">
+                                View
+                              </a>
+                            </div>
+                          
+                        </td>
+                      
+                    </tr>
+                  
+                    <tr>
+                      <th class="grid-header">4.0</th>
+                      
+                        <td>
+                          
+                          
+                            <a href="/figure/graphene_fc_parameter_scan_20250516_1_8q_100tp_d0.9_20250516-222708/fft_analysis.png" data-lightbox="param-sweep-test_grid_sweep_20250516-223155" data-title="graphene_fc - Qubits: 4.0, Drive Param: 0.7">
+                              <img src="/figure/graphene_fc_parameter_scan_20250516_1_8q_100tp_d0.9_20250516-222708/fft_analysis.png" class="grid-thumbnail" alt="FFT Analysis">
+                            </a>
+                            <div class="mt-2">
+                              <span class="badge bg-secondary">
+                                Time Crystal: No
+                              </span>
+                              <a href="/result/graphene_fc_parameter_scan_20250516_1_8q_100tp_d0.9_20250516-222708" class="btn btn-sm btn-outline-primary mt-1">
+                                View
+                              </a>
+                            </div>
+                          
+                        </td>
+                      
+                        <td>
+                          
+                          
+                            <a href="/figure/graphene_fc_parameter_scan_20250513_3_10q_100tp_d0.9_20250513-102445/fft_analysis.png" data-lightbox="param-sweep-test_grid_sweep_20250516-223155" data-title="graphene_fc - Qubits: 4.0, Drive Param: 0.9">
+                              <img src="/figure/graphene_fc_parameter_scan_20250513_3_10q_100tp_d0.9_20250513-102445/fft_analysis.png" class="grid-thumbnail" alt="FFT Analysis">
+                            </a>
+                            <div class="mt-2">
+                              <span class="badge bg-secondary">
+                                Time Crystal: No
+                              </span>
+                              <a href="/result/graphene_fc_parameter_scan_20250513_3_10q_100tp_d0.9_20250513-102445" class="btn btn-sm btn-outline-primary mt-1">
+                                View
+                              </a>
+                            </div>
+                          
+                        </td>
+                      
+                    </tr>
+                  
+                    <tr>
+                      <th class="grid-header">5.0</th>
+                      
+                        <td>
+                          
+                          
+                            <a href="/figure/graphene_fc_parameter_scan_20250513_2_9q_100tp_d0.9_20250513-102433/fft_analysis.png" data-lightbox="param-sweep-test_grid_sweep_20250516-223155" data-title="graphene_fc - Qubits: 5.0, Drive Param: 0.7">
+                              <img src="/figure/graphene_fc_parameter_scan_20250513_2_9q_100tp_d0.9_20250513-102433/fft_analysis.png" class="grid-thumbnail" alt="FFT Analysis">
+                            </a>
+                            <div class="mt-2">
+                              <span class="badge bg-secondary">
+                                Time Crystal: No
+                              </span>
+                              <a href="/result/graphene_fc_parameter_scan_20250513_2_9q_100tp_d0.9_20250513-102433" class="btn btn-sm btn-outline-primary mt-1">
+                                View
+                              </a>
+                            </div>
+                          
+                        </td>
+                      
+                        <td>
+                          
+                          
+                            <a href="/figure/graphene_fc_parameter_scan_20250513_1_8q_100tp_d0.9_20250513-102419/fft_analysis.png" data-lightbox="param-sweep-test_grid_sweep_20250516-223155" data-title="graphene_fc - Qubits: 5.0, Drive Param: 0.9">
+                              <img src="/figure/graphene_fc_parameter_scan_20250513_1_8q_100tp_d0.9_20250513-102419/fft_analysis.png" class="grid-thumbnail" alt="FFT Analysis">
+                            </a>
+                            <div class="mt-2">
+                              <span class="badge bg-secondary">
+                                Time Crystal: No
+                              </span>
+                              <a href="/result/graphene_fc_parameter_scan_20250513_1_8q_100tp_d0.9_20250513-102419" class="btn btn-sm btn-outline-primary mt-1">
+                                View
+                              </a>
+                            </div>
+                          
+                        </td>
+                      
+                    </tr>
+                  
+                </tbody>
+              </table>
+            </div>
