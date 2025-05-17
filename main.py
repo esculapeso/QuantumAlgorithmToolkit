@@ -1991,6 +1991,14 @@ def export_simulation_data(result_name):
             with open(data_file, 'r') as f:
                 result_data = json.load(f)
         
+        # Load analysis data
+        analysis_file = os.path.join(results_path, 'analysis_results.json')
+        if os.path.exists(analysis_file):
+            with open(analysis_file, 'r') as f:
+                analysis_data = json.load(f)
+        else:
+            analysis_data = {}
+        
         # Create CSV file
         import csv
         import io
@@ -1999,93 +2007,90 @@ def export_simulation_data(result_name):
         csv_data = io.StringIO()
         writer = csv.writer(csv_data)
         
-        # Write header
+        # Add metadata header and values
+        writer.writerow(['# SIMULATION METADATA'])
+        writer.writerow(['# This file contains frequency spectrum data from the quantum simulation'])
+        writer.writerow(['# Generated on', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+        writer.writerow([''])
+        writer.writerow(['# PARAMETERS'])
+        
+        # Extract parameters either from result_data or analysis_data
+        params = result_data.get('parameters', {})
+        if not params and 'parameters' in analysis_data:
+            params = analysis_data.get('parameters', {})
+        
+        # Write parameter data
+        for key, value in params.items():
+            writer.writerow([f'# {key}', value])
+        
+        # Add simulation results
+        writer.writerow([''])
+        writer.writerow(['# SIMULATION RESULTS'])
+        writer.writerow([f'# Time Crystal Detected', result_data.get('time_crystal_detected', False)])
+        writer.writerow([f'# Incommensurate Frequencies', result_data.get('incommensurate_count', 0)])
+        writer.writerow([f'# Linear Combs Detected', result_data.get('linear_combs_detected', False)])
+        writer.writerow([f'# Log Combs Detected', result_data.get('log_combs_detected', False)])
+        writer.writerow([f'# Drive Frequency', result_data.get('drive_frequency', 0.0)])
+        writer.writerow([''])
+        
+        # Write data header
         writer.writerow(['Component', 'Frequency', 'Amplitude', 'Phase', 
                         'Is Harmonic', 'Is Incommensurate', 'Is Comb Tooth'])
         
-        # Check if we have analysis data
-        if 'analysis' in result_data:
-            analysis = result_data['analysis']
-            fc_analysis = result_data.get('fc_analysis', {})
-            comb_analysis = result_data.get('comb_analysis', {})
+        # Look for analysis in the proper location
+        basic_analysis = {}
+        fc_analysis = {}
+        comb_analysis = {}
+        if 'basic_analysis' in analysis_data:
+            basic_analysis = analysis_data.get('basic_analysis', {})
+            fc_analysis = analysis_data.get('frequency_crystal_analysis', {})
+            comb_analysis = analysis_data.get('linear_comb_analysis', {})
+        
+        # Attempt to find FFT data
+        # First check for fft_data.json if it exists
+        fft_data_path = os.path.join(results_path, 'numeric_data', 'fft_data.json')
+        fft_data = None
+        
+        if os.path.exists(fft_data_path):
+            with open(fft_data_path, 'r') as f:
+                fft_data = json.load(f)
+        
+        # If we have FFT data directly available
+        if fft_data and 'positive_frequencies' in fft_data:
+            frequencies = fft_data.get('positive_frequencies', [])
+            mx_amp = fft_data.get('mx_fft_pos', [])
+            my_amp = fft_data.get('my_fft_pos', [])
+            mz_amp = fft_data.get('mz_fft_pos', [])
+            
+            if frequencies and len(frequencies) > 0:
+                # This is a simplified approach since phase data might not be available
+                for i in range(len(frequencies)):
+                    if i < len(mx_amp):
+                        writer.writerow(['X', frequencies[i], mx_amp[i], 0.0, False, False, False])
+                    if i < len(my_amp):
+                        writer.writerow(['Y', frequencies[i], my_amp[i], 0.0, False, False, False])
+                    if i < len(mz_amp):
+                        writer.writerow(['Z', frequencies[i], mz_amp[i], 0.0, False, False, False])
+        
+        # If we have peaks data
+        if 'frequency_crystal_analysis' in analysis_data and 'mx_peaks' in analysis_data.get('frequency_crystal_analysis', {}):
+            fc_data = analysis_data['frequency_crystal_analysis']
             
             # Add X component data
-            if 'mx_frequencies' in analysis and len(analysis['mx_frequencies']) > 0:
-                for i in range(len(analysis['mx_frequencies'])):
-                    freq = analysis['mx_frequencies'][i]
-                    amp = analysis['mx_amplitudes'][i]
-                    phase = analysis['mx_phases'][i]
-                    
-                    # Check flags
-                    is_harmonic = False
-                    is_incommensurate = False
-                    is_comb_tooth = False
-                    
-                    if (fc_analysis and 'mx_harmonic_mask' in fc_analysis and 
-                            i < len(fc_analysis['mx_harmonic_mask'])):
-                        is_harmonic = bool(fc_analysis['mx_harmonic_mask'][i])
-                        
-                    if (fc_analysis and 'mx_incommensurate_mask' in fc_analysis and 
-                            i < len(fc_analysis['mx_incommensurate_mask'])):
-                        is_incommensurate = bool(fc_analysis['mx_incommensurate_mask'][i])
-                        
-                    if (comb_analysis and 'mx_comb_mask' in comb_analysis and 
-                            i < len(comb_analysis['mx_comb_mask'])):
-                        is_comb_tooth = bool(comb_analysis['mx_comb_mask'][i])
-                    
-                    writer.writerow(['X', freq, amp, phase, is_harmonic, is_incommensurate, is_comb_tooth])
-            
-            # Add Y component data
-            if 'my_frequencies' in analysis and len(analysis['my_frequencies']) > 0:
-                for i in range(len(analysis['my_frequencies'])):
-                    freq = analysis['my_frequencies'][i]
-                    amp = analysis['my_amplitudes'][i]
-                    phase = analysis['my_phases'][i]
-                    
-                    # Check flags
-                    is_harmonic = False
-                    is_incommensurate = False
-                    is_comb_tooth = False
-                    
-                    if (fc_analysis and 'my_harmonic_mask' in fc_analysis and 
-                            i < len(fc_analysis['my_harmonic_mask'])):
-                        is_harmonic = bool(fc_analysis['my_harmonic_mask'][i])
-                        
-                    if (fc_analysis and 'my_incommensurate_mask' in fc_analysis and 
-                            i < len(fc_analysis['my_incommensurate_mask'])):
-                        is_incommensurate = bool(fc_analysis['my_incommensurate_mask'][i])
-                        
-                    if (comb_analysis and 'my_comb_mask' in comb_analysis and 
-                            i < len(comb_analysis['my_comb_mask'])):
-                        is_comb_tooth = bool(comb_analysis['my_comb_mask'][i])
-                    
-                    writer.writerow(['Y', freq, amp, phase, is_harmonic, is_incommensurate, is_comb_tooth])
+            if 'mx_peaks' in fc_data and isinstance(fc_data['mx_peaks'], list):
+                for peak in fc_data['mx_peaks']:
+                    if isinstance(peak, dict) and 'frequency' in peak and 'amplitude' in peak:
+                        writer.writerow(['X', peak.get('frequency'), peak.get('amplitude'), 
+                                        peak.get('phase', 0.0), peak.get('is_harmonic', False),
+                                        peak.get('is_incommensurate', False), peak.get('is_comb_tooth', False)])
             
             # Add Z component data
-            if 'mz_frequencies' in analysis and len(analysis['mz_frequencies']) > 0:
-                for i in range(len(analysis['mz_frequencies'])):
-                    freq = analysis['mz_frequencies'][i]
-                    amp = analysis['mz_amplitudes'][i]
-                    phase = analysis['mz_phases'][i]
-                    
-                    # Check flags
-                    is_harmonic = False
-                    is_incommensurate = False
-                    is_comb_tooth = False
-                    
-                    if (fc_analysis and 'mz_harmonic_mask' in fc_analysis and 
-                            i < len(fc_analysis['mz_harmonic_mask'])):
-                        is_harmonic = bool(fc_analysis['mz_harmonic_mask'][i])
-                        
-                    if (fc_analysis and 'mz_incommensurate_mask' in fc_analysis and 
-                            i < len(fc_analysis['mz_incommensurate_mask'])):
-                        is_incommensurate = bool(fc_analysis['mz_incommensurate_mask'][i])
-                        
-                    if (comb_analysis and 'mz_comb_mask' in comb_analysis and 
-                            i < len(comb_analysis['mz_comb_mask'])):
-                        is_comb_tooth = bool(comb_analysis['mz_comb_mask'][i])
-                    
-                    writer.writerow(['Z', freq, amp, phase, is_harmonic, is_incommensurate, is_comb_tooth])
+            if 'mz_peaks' in fc_data and isinstance(fc_data['mz_peaks'], list):
+                for peak in fc_data['mz_peaks']:
+                    if isinstance(peak, dict) and 'frequency' in peak and 'amplitude' in peak:
+                        writer.writerow(['Z', peak.get('frequency'), peak.get('amplitude'), 
+                                        peak.get('phase', 0.0), peak.get('is_harmonic', False),
+                                        peak.get('is_incommensurate', False), peak.get('is_comb_tooth', False)])
         
         # Move the cursor to the beginning of the StringIO object
         csv_data.seek(0)
