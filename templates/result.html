@@ -119,6 +119,159 @@
                 {% endfor %}
             </div>
         </div>
+        
+        <!-- Frequency Data Section -->
+        <div id="frequency-data" class="mb-4">
+            <h5>Frequency Spectrum Data</h5>
+            <div class="card">
+                <div class="card-body">
+                    <ul class="nav nav-tabs" id="freqTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="mx-tab" data-bs-toggle="tab" data-bs-target="#mx-data" type="button" role="tab" aria-controls="mx-data" aria-selected="true">X Component</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="my-tab" data-bs-toggle="tab" data-bs-target="#my-data" type="button" role="tab" aria-controls="my-data" aria-selected="false">Y Component</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="mz-tab" data-bs-toggle="tab" data-bs-target="#mz-data" type="button" role="tab" aria-controls="mz-data" aria-selected="false">Z Component</button>
+                        </li>
+                    </ul>
+                    <div class="tab-content mt-3" id="freqTabContent">
+                        <div class="tab-pane fade show active" id="mx-data" role="tabpanel" aria-labelledby="mx-tab">
+                            {% if result_data.analysis and result_data.analysis.mx_frequencies %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Frequency</th>
+                                                <th>Amplitude</th>
+                                                <th>Phase</th>
+                                                <th>Notes</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for i in range(result_data.analysis.mx_frequencies|length) %}
+                                                {% if i < 20 %}
+                                                <tr>
+                                                    <td>{{ "%.4f"|format(result_data.analysis.mx_frequencies[i]) }}</td>
+                                                    <td>{{ "%.4f"|format(result_data.analysis.mx_amplitudes[i]) }}</td>
+                                                    <td>{{ "%.4f"|format(result_data.analysis.mx_phases[i]) }}</td>
+                                                    <td>
+                                                        {% if result_data.fc_analysis and result_data.fc_analysis.mx_harmonic_mask and i < result_data.fc_analysis.mx_harmonic_mask|length and result_data.fc_analysis.mx_harmonic_mask[i] %}
+                                                            <span class="badge bg-primary">Harmonic</span>
+                                                        {% endif %}
+                                                        {% if result_data.fc_analysis and result_data.fc_analysis.mx_incommensurate_mask and i < result_data.fc_analysis.mx_incommensurate_mask|length and result_data.fc_analysis.mx_incommensurate_mask[i] %}
+                                                            <span class="badge bg-warning">Incommensurate</span>
+                                                        {% endif %}
+                                                        {% if result_data.comb_analysis and result_data.comb_analysis.mx_comb_mask and i < result_data.comb_analysis.mx_comb_mask|length and result_data.comb_analysis.mx_comb_mask[i] %}
+                                                            <span class="badge bg-success">Comb Tooth</span>
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                    {% if result_data.analysis.mx_frequencies|length > 20 %}
+                                        <p class="small text-muted">Showing 20 of {{ result_data.analysis.mx_frequencies|length }} frequency components.</p>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <div class="alert alert-info">No X-component frequency data available.</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="tab-pane fade" id="my-data" role="tabpanel" aria-labelledby="my-tab">
+                            {% if result_data.analysis and result_data.analysis.my_frequencies %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Frequency</th>
+                                                <th>Amplitude</th>
+                                                <th>Phase</th>
+                                                <th>Notes</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for i in range(result_data.analysis.my_frequencies|length) %}
+                                                {% if i < 20 %}
+                                                <tr>
+                                                    <td>{{ "%.4f"|format(result_data.analysis.my_frequencies[i]) }}</td>
+                                                    <td>{{ "%.4f"|format(result_data.analysis.my_amplitudes[i]) }}</td>
+                                                    <td>{{ "%.4f"|format(result_data.analysis.my_phases[i]) }}</td>
+                                                    <td>
+                                                        {% if result_data.fc_analysis and result_data.fc_analysis.my_harmonic_mask and i < result_data.fc_analysis.my_harmonic_mask|length and result_data.fc_analysis.my_harmonic_mask[i] %}
+                                                            <span class="badge bg-primary">Harmonic</span>
+                                                        {% endif %}
+                                                        {% if result_data.fc_analysis and result_data.fc_analysis.my_incommensurate_mask and i < result_data.fc_analysis.my_incommensurate_mask|length and result_data.fc_analysis.my_incommensurate_mask[i] %}
+                                                            <span class="badge bg-warning">Incommensurate</span>
+                                                        {% endif %}
+                                                        {% if result_data.comb_analysis and result_data.comb_analysis.my_comb_mask and i < result_data.comb_analysis.my_comb_mask|length and result_data.comb_analysis.my_comb_mask[i] %}
+                                                            <span class="badge bg-success">Comb Tooth</span>
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                    {% if result_data.analysis.my_frequencies|length > 20 %}
+                                        <p class="small text-muted">Showing 20 of {{ result_data.analysis.my_frequencies|length }} frequency components.</p>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <div class="alert alert-info">No Y-component frequency data available.</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="tab-pane fade" id="mz-data" role="tabpanel" aria-labelledby="mz-tab">
+                            {% if result_data.analysis and result_data.analysis.mz_frequencies %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Frequency</th>
+                                                <th>Amplitude</th>
+                                                <th>Phase</th>
+                                                <th>Notes</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for i in range(result_data.analysis.mz_frequencies|length) %}
+                                                {% if i < 20 %}
+                                                <tr>
+                                                    <td>{{ "%.4f"|format(result_data.analysis.mz_frequencies[i]) }}</td>
+                                                    <td>{{ "%.4f"|format(result_data.analysis.mz_amplitudes[i]) }}</td>
+                                                    <td>{{ "%.4f"|format(result_data.analysis.mz_phases[i]) }}</td>
+                                                    <td>
+                                                        {% if result_data.fc_analysis and result_data.fc_analysis.mz_harmonic_mask and i < result_data.fc_analysis.mz_harmonic_mask|length and result_data.fc_analysis.mz_harmonic_mask[i] %}
+                                                            <span class="badge bg-primary">Harmonic</span>
+                                                        {% endif %}
+                                                        {% if result_data.fc_analysis and result_data.fc_analysis.mz_incommensurate_mask and i < result_data.fc_analysis.mz_incommensurate_mask|length and result_data.fc_analysis.mz_incommensurate_mask[i] %}
+                                                            <span class="badge bg-warning">Incommensurate</span>
+                                                        {% endif %}
+                                                        {% if result_data.comb_analysis and result_data.comb_analysis.mz_comb_mask and i < result_data.comb_analysis.mz_comb_mask|length and result_data.comb_analysis.mz_comb_mask[i] %}
+                                                            <span class="badge bg-success">Comb Tooth</span>
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                    {% if result_data.analysis.mz_frequencies|length > 20 %}
+                                        <p class="small text-muted">Showing 20 of {{ result_data.analysis.mz_frequencies|length }} frequency components.</p>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <div class="alert alert-info">No Z-component frequency data available.</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     <div class="card-footer bg-transparent">
         <a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Home</a>
