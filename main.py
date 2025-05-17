@@ -1778,7 +1778,7 @@ def view_sweep_grid(sweep_session):
                     param2_name = sweep_record.param2.replace('_', ' ').title()
                     sweep_session_title += f" & {param2_name} Sweep"
             
-            return render_template('sweep_grid.html',
+            return render_template('sweep_grid_new.html',
                                   sweep_session=sweep_session,
                                   sweep_session_title=sweep_session_title,
                                   simulations=[],
@@ -1828,7 +1828,7 @@ def view_sweep_grid(sweep_session):
         
         created_at = simulations[0].created_at.strftime('%Y-%m-%d %H:%M') if simulations[0].created_at else ''
         
-        return render_template('sweep_grid.html',
+        return render_template('sweep_grid_new.html',
                               sweep_session=sweep_session,
                               sweep_session_title=sweep_session_title,
                               simulations=simulations,
