@@ -353,12 +353,62 @@ def run_simulation(circuit_type, qubits=3, shots=8192, drive_steps=5,
         with open(os.path.join(data_path, 'expectation_values.json'), 'w') as f:
             json.dump(exp_data, f, indent=2)
         
-        # Save FFT data
+        # Save FFT data with metadata
         fft_data = {
+            # Include all simulation parameters as metadata
+            'metadata': {
+                'circuit_type': circuit_type,
+                'qubits': int(qubits),
+                'shots': int(shots),
+                'drive_steps': int(drive_steps),
+                'time_points': int(time_points),
+                'max_time': float(max_time),
+                'drive_param': float(drive_param),
+                'init_state': init_state,
+                'drive_frequency': float(analysis.get('drive_frequency', 0)),
+                'has_subharmonics': bool(analysis.get('has_subharmonics', False)),
+                'time_crystal_detected': bool(analysis.get('has_subharmonics', False)),
+                'incommensurate_count': int(fc_analysis.get('incommensurate_peak_count', 0)),
+                'linear_combs_detected': bool(comb_analysis.get('mx_comb_found', False) or comb_analysis.get('mz_comb_found', False)),
+                'log_combs_detected': bool(log_comb_analysis.get('mx_log_comb_found', False) or log_comb_analysis.get('mz_log_comb_found', False)),
+                'created_at': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                # Add parameter sweep tracking information
+                'sweep_session': sweep_session,
+                'sweep_index': sweep_index,
+                'sweep_param1': sweep_param1,
+                'sweep_value1': sweep_value1,
+                'sweep_param2': sweep_param2,
+                'sweep_value2': sweep_value2
+            },
+            # Frequency data
             'positive_frequencies': analysis.get('positive_frequencies', []).tolist(),
             'mx_fft_pos': analysis.get('mx_fft_pos', []).tolist(),
             'my_fft_pos': analysis.get('my_fft_pos', []).tolist(),
-            'mz_fft_pos': analysis.get('mz_fft_pos', []).tolist()
+            'mz_fft_pos': analysis.get('mz_fft_pos', []).tolist(),
+            # Peak information
+            'peaks': {
+                'mx': {
+                    'frequencies': [float(analysis.get('positive_frequencies', [])[i]) for i in analysis.get('mx_peaks_indices', [])],
+                    'amplitudes': [float(analysis.get('mx_fft_pos', [])[i]) for i in analysis.get('mx_peaks_indices', [])],
+                    'is_harmonic': fc_analysis.get('mx_harmonic_mask', []),
+                    'is_incommensurate': fc_analysis.get('mx_incommensurate_mask', []),
+                    'is_comb_tooth': comb_analysis.get('mx_comb_mask', [])
+                },
+                'my': {
+                    'frequencies': [float(analysis.get('positive_frequencies', [])[i]) for i in analysis.get('my_peaks_indices', [])],
+                    'amplitudes': [float(analysis.get('my_fft_pos', [])[i]) for i in analysis.get('my_peaks_indices', [])],
+                    'is_harmonic': fc_analysis.get('my_harmonic_mask', []),
+                    'is_incommensurate': fc_analysis.get('my_incommensurate_mask', []),
+                    'is_comb_tooth': comb_analysis.get('my_comb_mask', [])
+                },
+                'mz': {
+                    'frequencies': [float(analysis.get('positive_frequencies', [])[i]) for i in analysis.get('mz_peaks_indices', [])],
+                    'amplitudes': [float(analysis.get('mz_fft_pos', [])[i]) for i in analysis.get('mz_peaks_indices', [])],
+                    'is_harmonic': fc_analysis.get('mz_harmonic_mask', []),
+                    'is_incommensurate': fc_analysis.get('mz_incommensurate_mask', []),
+                    'is_comb_tooth': comb_analysis.get('mz_comb_mask', [])
+                }
+            }
         }
         with open(os.path.join(data_path, 'fft_data.json'), 'w') as f:
             json.dump(fft_data, f, indent=2)
