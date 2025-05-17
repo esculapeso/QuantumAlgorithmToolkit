@@ -6,10 +6,12 @@
 <!-- Lightbox for images -->
 <link href="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.3/css/lightbox.min.css" rel="stylesheet">
 <style>
-  /* Reset specific styles for sweep grid */
+  /* Constrain image sizes in sweep grid */
   .sweep-grid img {
-    width: auto;
+    max-width: 100%;
     height: auto;
+    max-height: 200px;
+    object-fit: contain;
   }
   
   /* Parameter sweep grid */
