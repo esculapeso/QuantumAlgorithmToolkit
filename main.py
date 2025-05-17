@@ -410,11 +410,22 @@ def run_parameter_sweep():
                 )
                 results.append(result)
             
-            # Get the result path to redirect to
-            result_path = result.get('result_path', '').split('/')[-1]
-            
-            # Redirect to the result page
-            return redirect(url_for('view_result', result_name=result_path))
+            # Handle multiple circuit types
+            if len(results) > 1:
+                # Format a message with links to all simulation results
+                from flask import Markup
+                message = "Multiple simulations completed:<br>"
+                for i, res in enumerate(results):
+                    res_path = res.get('result_path', '').split('/')[-1]
+                    circuit = circuit_types[i]
+                    message += f"• {circuit}: <a href='/result/{res_path}'>{res_path}</a><br>"
+                
+                flash(Markup(message), "success")
+                return redirect(url_for('parameter_sweep'))
+            else:
+                # Single circuit type case
+                result_path = results[0].get('result_path', '').split('/')[-1]
+                return redirect(url_for('view_result', result_name=result_path))
         except Exception as e:
             print(f"Error running simulation: {str(e)}")
             traceback.print_exc()
@@ -422,8 +433,13 @@ def run_parameter_sweep():
             return redirect(url_for('parameter_sweep'))
             
 def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
-    """Run multiple simulations sequentially, one after another."""
+    """Run multiple simulations sequentially, one after another for a specific circuit type."""
     try:
+        # Validate circuit type
+        if not circuit_type:
+            print(f"Error: No circuit type provided for sequential simulations")
+            return
+            
         # Count of total parameter sets
         total_sets = len(parameter_sets)
         print(f"Starting sequential simulation run with {total_sets} parameter combinations")
