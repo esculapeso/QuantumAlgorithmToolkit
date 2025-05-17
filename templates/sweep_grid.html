@@ -148,38 +148,40 @@
               <table class="grid-table">
                 <thead>
                   <tr>
-                    <th class="grid-header">{{ param1 }} \ {{ param2 }}</th>
+                    <th style="width: 80px; font-weight: bold; white-space: nowrap;">{{ param1 }} \ {{ param2 }}</th>
                     {% for val2 in param2_values %}
-                      <th class="grid-header">{{ val2 }}</th>
+                      <th style="width: 150px; font-weight: bold; white-space: nowrap;">{{ val2 }}</th>
                     {% endfor %}
                   </tr>
                 </thead>
                 <tbody>
                   {% for val1 in param1_values %}
                     <tr>
-                      <th class="grid-header">{{ val1 }}</th>
+                      <th style="width: 80px; font-weight: bold; white-space: nowrap;">{{ val1 }}</th>
                       {% for val2 in param2_values %}
-                        <td style="max-width: 100px; padding: 5px;">
+                        <td style="width: 150px; height: 150px; padding: 5px; text-align: center; vertical-align: middle; border: 1px solid var(--bs-border-color);">
                           {% set sim = grid_lookup.get((val1, val2)) %}
                           {% if sim %}
+                            <!-- Link opens in lightbox -->
                             <a href="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
                                data-lightbox="param-sweep-{{ sweep_session }}"
-                               data-title="{{ circuit_type }} - {{ param1 }}: {{ val1 }}, {{ param2 }}: {{ val2 }}"
-                               onclick="event.preventDefault(); lightbox.start(document.querySelectorAll('a[data-lightbox=\'param-sweep-{{ sweep_session }}\']')); return false;">
+                               data-title="{{ circuit_type }} - {{ param1 }}: {{ val1 }}, {{ param2 }}: {{ val2 }}">
                               <img src="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
-                                   width="100"
+                                   width="120"
+                                   height="80"
+                                   style="max-width: 120px !important; height: auto !important; display: inline-block !important;"
                                    alt="FFT Analysis">
                             </a>
-                            <div class="mt-2">
-                              <span class="badge {% if sim.time_crystal_detected %}bg-success{% else %}bg-secondary{% endif %}">
-                                Time Crystal: {{ 'Yes' if sim.time_crystal_detected else 'No' }}
+                            <div style="margin-top: 5px;">
+                              <span class="badge {% if sim.time_crystal_detected %}bg-success{% else %}bg-secondary{% endif %}" style="font-size: 0.7rem;">
+                                Crystal: {{ 'Yes' if sim.time_crystal_detected else 'No' }}
                               </span>
-                              <a href="{{ url_for('view_result', result_name=sim.result_name) }}" class="btn btn-sm btn-outline-primary mt-1">
+                              <a href="{{ url_for('view_result', result_name=sim.result_name) }}" class="btn btn-sm btn-outline-primary" style="font-size: 0.7rem; padding: 0.2rem 0.4rem; margin-top: 2px;">
                                 View
                               </a>
                             </div>
                           {% else %}
-                            <div class="grid-empty">No data</div>
+                            <div style="color: var(--bs-secondary); font-style: italic; font-size: 0.8rem;">No data</div>
                           {% endif %}
                         </td>
                       {% endfor %}
