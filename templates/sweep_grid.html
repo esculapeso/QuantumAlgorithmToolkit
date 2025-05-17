@@ -45,8 +45,9 @@
   
   .grid-thumbnail {
     cursor: pointer;
-    width: 100%;
-    object-fit: contain;
+    max-width: 150px !important;
+    max-height: 120px !important;
+    width: auto !important;
     transition: transform 0.2s;
     display: block;
     margin: 0 auto;
@@ -227,11 +228,28 @@
 <!-- Lightbox for images -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.3/js/lightbox.min.js"></script>
 <script>
-  // Lightbox configuration
-  lightbox.option({
-    'resizeDuration': 200,
-    'wrapAround': true,
-    'albumLabel': 'Simulation %1 of %2'
+  // Make sure lightbox is properly initialized 
+  document.addEventListener('DOMContentLoaded', function() {
+    // Initialize lightbox
+    lightbox.option({
+      'resizeDuration': 200,
+      'wrapAround': true,
+      'albumLabel': 'Simulation %1 of %2',
+      'fadeDuration': 100,
+      'fitImagesInViewport': true,
+      'maxWidth': 800,
+      'maxHeight': 600
+    });
+    
+    // Make sure all images with data-lightbox attribute use lightbox
+    document.querySelectorAll('a[data-lightbox]').forEach(function(el) {
+      el.addEventListener('click', function(e) {
+        // Ensure the click triggers lightbox and not direct navigation
+        if (typeof lightbox !== 'undefined') {
+          e.preventDefault();
+        }
+      });
+    });
   });
 </script>
 {% endblock %}
