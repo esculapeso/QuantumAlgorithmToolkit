@@ -37,24 +37,15 @@
     width: 60px;
   }
   
+  /* No fixed width for TD elements - let them size based on content */
   .grid-table td {
-    width: 150px;
-    height: 150px;
-  }
-  
-  /* Responsive adjustments */
-  @media (max-width: 768px) {
-    .grid-table td {
-      width: 120px;
-      height: 120px;
-    }
+    padding: 10px;
+    min-width: 150px;
   }
   
   .grid-thumbnail {
     cursor: pointer;
     width: 100%;
-    max-width: 140px;
-    max-height: 110px;
     object-fit: contain;
     transition: transform 0.2s;
     display: block;
