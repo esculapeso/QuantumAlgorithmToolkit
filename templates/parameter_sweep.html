@@ -325,6 +325,9 @@
                                 if (submitButton) {
                                     submitButton.disabled = !anyChecked;
                                 }
+                                
+                                // Update combination count when circuit selection changes
+                                updateCombinationCount();
                             });
                         });
                         
