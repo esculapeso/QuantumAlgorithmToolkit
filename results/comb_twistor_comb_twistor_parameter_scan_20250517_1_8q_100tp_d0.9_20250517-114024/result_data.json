@@ -1,0 +1,25 @@
+{
+  "parameters": {
+    "circuit_type": "comb_twistor",
+    "qubits": 8,
+    "shots": 8192,
+    "drive_steps": 5,
+    "time_points": 100,
+    "max_time": 5.0,
+    "drive_param": 0.9,
+    "init_state": "superposition",
+    "sweep_session": "comb_twistor_parameter_scan_20250517",
+    "sweep_index": 0,
+    "sweep_param1": "max_time",
+    "sweep_value1": 5.0,
+    "sweep_param2": null,
+    "sweep_value2": null
+  },
+  "time_crystal_detected": false,
+  "incommensurate_count": 0,
+  "drive_frequency": 0.2,
+  "linear_combs_detected": false,
+  "log_combs_detected": false,
+  "random_seed": 73748,
+  "timestamp": "20250517114024"
+}

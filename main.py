@@ -277,7 +277,12 @@ def run_parameter_sweep():
     """Run a parameter sweep with the provided parameters."""
     # Extract base configuration
     circuit_types = request.form.getlist('circuit_types[]')
-    scan_name = request.form.get('scan_name', f'param_sweep_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}')
+    # Always create a unique scan name with timestamp to prevent overwriting existing sweeps
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    scan_name = request.form.get('scan_name', f'param_sweep_{timestamp}')
+    # Ensure uniqueness by appending timestamp if scan_name was provided by user
+    if scan_name == request.form.get('scan_name'):
+        scan_name = f"{scan_name}_{timestamp}"
     init_state = request.form.get('init_state', 'superposition')
     
     # If no circuit types selected, default to first circuit type
