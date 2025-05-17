@@ -159,15 +159,16 @@
                     <tr>
                       <th class="grid-header">{{ val1 }}</th>
                       {% for val2 in param2_values %}
-                        <td>
+                        <td style="max-width: 100px; padding: 5px;">
                           {% set sim = grid_lookup.get((val1, val2)) %}
                           {% if sim %}
                             <a href="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
                                data-lightbox="param-sweep-{{ sweep_session }}"
-                               data-title="{{ circuit_type }} - {{ param1 }}: {{ val1 }}, {{ param2 }}: {{ val2 }}">
+                               data-title="{{ circuit_type }} - {{ param1 }}: {{ val1 }}, {{ param2 }}: {{ val2 }}"
+                               onclick="event.preventDefault(); lightbox.start(document.querySelectorAll('a[data-lightbox=\'param-sweep-{{ sweep_session }}\']')); return false;">
                               <img src="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
-                                   style="width: 100%; max-width: 100px; max-height: 80px; object-fit: contain; margin: 0 auto; display: block;"
-                                   class="grid-thumbnail" alt="FFT Analysis">
+                                   width="100"
+                                   alt="FFT Analysis">
                             </a>
                             <div class="mt-2">
                               <span class="badge {% if sim.time_crystal_detected %}bg-success{% else %}bg-secondary{% endif %}">
