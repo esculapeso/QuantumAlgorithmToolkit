@@ -6,74 +6,85 @@
 <!-- Lightbox for images -->
 <link href="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.3/css/lightbox.min.css" rel="stylesheet">
 <style>
-  /* Global image sizing */
-  img {
-    width: 100%;
+  /* Reset specific styles for sweep grid */
+  .sweep-grid img {
+    width: auto;
+    height: auto;
   }
   
-  .grid-container {
+  /* Parameter sweep grid */
+  .sweep-grid {
+    margin: 20px 0;
+  }
+  
+  .sweep-grid-container {
     overflow-x: auto;
-    margin-bottom: 20px;
   }
   
-  .grid-table {
+  .sweep-grid-table {
     border-collapse: collapse;
+    border-spacing: 0;
     width: 100%;
-    table-layout: fixed;
     margin-bottom: 1rem;
   }
   
-  .grid-table th, .grid-table td {
+  .sweep-grid-table th {
+    background-color: var(--bs-primary-bg-subtle);
+    font-weight: bold;
+    text-align: center;
+    white-space: nowrap;
+    font-size: 0.9rem;
+    padding: 6px;
+    border: 1px solid var(--bs-border-color);
+  }
+  
+  .sweep-grid-table td {
     border: 1px solid var(--bs-border-color);
     padding: 6px;
     text-align: center;
+    width: 120px;
     vertical-align: middle;
-    word-wrap: break-word;
   }
   
-  .grid-table th {
-    background-color: var(--bs-primary-bg-subtle);
-    position: sticky;
-    top: 0;
-    font-size: 0.9rem;
-  }
-  
-  .grid-table th:first-child {
+  .sweep-grid-table th:first-child {
     width: 60px;
   }
   
-  /* No fixed width for TD elements - let them size based on content */
-  .grid-table td {
-    padding: 10px;
-    min-width: 150px;
-  }
-  
-  .grid-thumbnail {
-    cursor: pointer;
-    max-width: 100px !important;
-    max-height: 80px !important;
-    width: auto !important;
-    display: block;
+  .sweep-grid-thumbnail {
+    max-width: 100px;
+    max-height: 80px;
     margin: 0 auto;
+    display: block;
+    transition: opacity 0.2s;
+    cursor: pointer;
   }
   
-  .grid-thumbnail:hover {
-    transform: scale(1.05);
+  .sweep-grid-thumbnail:hover {
+    opacity: 0.9;
   }
   
-  .grid-empty {
+  .sweep-grid-cell-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  
+  .sweep-grid-empty {
     text-align: center;
     color: var(--bs-secondary);
+    font-style: italic;
+    font-size: 0.8rem;
   }
   
-  .grid-header {
-    font-weight: bold;
-    white-space: nowrap;
+  .sweep-grid-badge {
+    font-size: 0.7rem;
+    padding: 2px 5px;
   }
   
-  .params-badge {
-    font-size: 0.8em;
-    margin-right: 5px;
+  .sweep-grid-btn {
+    font-size: 0.7rem;
+    padding: 2px 6px;
   }
 </style>
 {% endblock %}
@@ -144,51 +155,51 @@
           
           {% elif display_mode == 'two_params' %}
             <!-- Two parameter sweep - display as grid -->
-            <div class="grid-container">
-              <table class="grid-table">
-                <thead>
-                  <tr>
-                    <th style="width: 80px; font-weight: bold; white-space: nowrap;">{{ param1 }} \ {{ param2 }}</th>
-                    {% for val2 in param2_values %}
-                      <th style="width: 150px; font-weight: bold; white-space: nowrap;">{{ val2 }}</th>
-                    {% endfor %}
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for val1 in param1_values %}
+            <div class="sweep-grid">
+              <div class="sweep-grid-container">
+                <table class="sweep-grid-table">
+                  <thead>
                     <tr>
-                      <th style="width: 80px; font-weight: bold; white-space: nowrap;">{{ val1 }}</th>
+                      <th>{{ param1 }} \ {{ param2 }}</th>
                       {% for val2 in param2_values %}
-                        <td style="width: 150px; height: 150px; padding: 5px; text-align: center; vertical-align: middle; border: 1px solid var(--bs-border-color);">
-                          {% set sim = grid_lookup.get((val1, val2)) %}
-                          {% if sim %}
-                            <!-- Link opens in lightbox -->
-                            <a href="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
-                               data-lightbox="param-sweep-{{ sweep_session }}"
-                               data-title="{{ circuit_type }} - {{ param1 }}: {{ val1 }}, {{ param2 }}: {{ val2 }}">
-                              <img src="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
-                                   width="120"
-                                   height="80"
-                                   style="max-width: 120px !important; height: auto !important; display: inline-block !important;"
-                                   alt="FFT Analysis">
-                            </a>
-                            <div style="margin-top: 5px;">
-                              <span class="badge {% if sim.time_crystal_detected %}bg-success{% else %}bg-secondary{% endif %}" style="font-size: 0.7rem;">
-                                Crystal: {{ 'Yes' if sim.time_crystal_detected else 'No' }}
-                              </span>
-                              <a href="{{ url_for('view_result', result_name=sim.result_name) }}" class="btn btn-sm btn-outline-primary" style="font-size: 0.7rem; padding: 0.2rem 0.4rem; margin-top: 2px;">
-                                View
-                              </a>
-                            </div>
-                          {% else %}
-                            <div style="color: var(--bs-secondary); font-style: italic; font-size: 0.8rem;">No data</div>
-                          {% endif %}
-                        </td>
+                        <th>{{ val2 }}</th>
                       {% endfor %}
                     </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {% for val1 in param1_values %}
+                      <tr>
+                        <th>{{ val1 }}</th>
+                        {% for val2 in param2_values %}
+                          <td>
+                            {% set sim = grid_lookup.get((val1, val2)) %}
+                            {% if sim %}
+                              <div class="sweep-grid-cell-content">
+                                <!-- Link opens in lightbox -->
+                                <a href="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
+                                  data-lightbox="param-sweep-{{ sweep_session }}"
+                                  data-title="{{ circuit_type }} - {{ param1 }}: {{ val1 }}, {{ param2 }}: {{ val2 }}">
+                                  <img src="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
+                                      class="sweep-grid-thumbnail"
+                                      alt="FFT Analysis">
+                                </a>
+                                <span class="badge {% if sim.time_crystal_detected %}bg-success{% else %}bg-secondary{% endif %} sweep-grid-badge">
+                                  {{ 'Crystal ✓' if sim.time_crystal_detected else 'No Crystal' }}
+                                </span>
+                                <a href="{{ url_for('view_result', result_name=sim.result_name) }}" class="btn btn-sm btn-outline-primary sweep-grid-btn">
+                                  Details
+                                </a>
+                              </div>
+                            {% else %}
+                              <div class="sweep-grid-empty">No data</div>
+                            {% endif %}
+                          </td>
+                        {% endfor %}
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
             </div>
           
           {% elif display_mode == 'pending' %}
