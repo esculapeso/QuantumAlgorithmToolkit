@@ -1,0 +1,25 @@
+{
+  "parameters": {
+    "circuit_type": "penrose",
+    "qubits": 10,
+    "shots": 8192,
+    "drive_steps": 5,
+    "time_points": 100,
+    "max_time": 10.0,
+    "drive_param": 0.9,
+    "init_state": "superposition",
+    "sweep_session": "parameter_scan_20250517",
+    "sweep_index": 2,
+    "sweep_param1": "qubits",
+    "sweep_value1": 10,
+    "sweep_param2": null,
+    "sweep_value2": null
+  },
+  "time_crystal_detected": false,
+  "incommensurate_count": 0,
+  "drive_frequency": 0.1,
+  "linear_combs_detected": false,
+  "log_combs_detected": false,
+  "random_seed": 19258,
+  "timestamp": "20250517104151"
+}
