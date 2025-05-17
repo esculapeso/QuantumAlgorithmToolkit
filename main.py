@@ -1802,6 +1802,17 @@ def run_example_parameter_scan():
     
     print(f"Parameter scan completed. Processed {len(results)} parameter sets.")
 
+@app.route('/sweep_preview/<sweep_session>')
+def sweep_preview(sweep_session):
+    """View a minimalist preview of frequency spectra for all simulations in a parameter sweep."""
+    # Get the parameter sweep record
+    sweep = ParameterSweep.query.filter_by(session_id=sweep_session).first_or_404()
+    
+    # Get all simulations for this sweep
+    simulations = SimulationResult.query.filter_by(sweep_session=sweep_session).order_by(SimulationResult.sweep_index).all()
+    
+    return render_template('sweep_preview.html', sweep=sweep, simulations=simulations)
+
 @app.route('/sweep_grid/<sweep_session>')
 def view_sweep_grid(sweep_session):
     """View parameter sweep results in a grid format."""
