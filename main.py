@@ -276,9 +276,14 @@ def parameter_sweep():
 def run_parameter_sweep():
     """Run a parameter sweep with the provided parameters."""
     # Extract base configuration
-    circuit_type = request.form.get('circuit_type')
+    circuit_types = request.form.getlist('circuit_types[]')
     scan_name = request.form.get('scan_name', f'param_sweep_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}')
     init_state = request.form.get('init_state', 'superposition')
+    
+    # If no circuit types selected, default to first circuit type
+    if not circuit_types:
+        flash("No circuit types selected. Please select at least one circuit type.", "warning")
+        return redirect(url_for('parameter_sweep'))
     
     # Parameter ranges and steps
     param_ranges = {}
@@ -342,15 +347,24 @@ def run_parameter_sweep():
     
     # If we have multiple simulations, run them sequentially
     if large_simulation:
-        # Start a background thread to run all simulations sequentially
-        sweep_thread = threading.Thread(
-            target=run_sequential_simulations,
-            args=(circuit_type, parameter_sets, scan_name)
-        )
-        sweep_thread.daemon = True
-        sweep_thread.start()
+        # Track all sessions for the response
+        all_sessions = []
         
-        # Use scan_name as the sweep session ID
+        # Create separate sessions for each circuit type
+        for circuit_type in circuit_types:
+            # Create a unique session name for each circuit type
+            circuit_scan_name = f"{circuit_type}_{scan_name}" if len(circuit_types) > 1 else scan_name
+            all_sessions.append(circuit_scan_name)
+            
+            # Start a background thread to run simulations for this circuit type
+            sweep_thread = threading.Thread(
+                target=run_sequential_simulations,
+                args=(circuit_type, parameter_sets, circuit_scan_name)
+            )
+            sweep_thread.daemon = True
+            sweep_thread.start()
+        
+        # Use the main scan_name as the primary session ID for the response
         sweep_session_id = scan_name
         
         # Inform the user that simulations are running
@@ -359,35 +373,42 @@ def run_parameter_sweep():
         # Stay on the parameter sweep page
         return redirect(url_for('parameter_sweep', active_sweep=sweep_session_id))
     else:
-        # For a single parameter set, just run it directly
+        # For a single parameter set, run it directly for each selected circuit type
         try:
-            # Run the simulation with the provided parameters
+            # Import the simulation function
             from simulation import run_simulation
             
             # Get the first (and only) parameter set
             param_set = parameter_sets[0]
             
-            # Run the simulation
-            result = run_simulation(
-                circuit_type=circuit_type,
-                qubits=param_set.get('qubits', 3),
-                shots=param_set.get('shots', 8192),
-                drive_steps=param_set.get('drive_steps', 5),
-                time_points=param_set.get('time_points', 100),
-                max_time=param_set.get('max_time', 10.0),
-                drive_param=param_set.get('drive_param', 0.9),
-                init_state=param_set.get('init_state', 'superposition'),
-                param_set_name=scan_name,
-                save_results=True,
-                show_plots=False,
-                # Add parameter sweep tracking for single simulation
-                sweep_session=scan_name,
-                sweep_index=0,
-                sweep_param1=None,
-                sweep_value1=None,
-                sweep_param2=None,
-                sweep_value2=None
-            )
+            results = []
+            # Run a simulation for each selected circuit type
+            for idx, circuit_type in enumerate(circuit_types):
+                # Create a unique session name for each circuit type
+                circuit_scan_name = f"{circuit_type}_{scan_name}" if len(circuit_types) > 1 else scan_name
+                
+                # Run the simulation for this circuit type
+                result = run_simulation(
+                    circuit_type=circuit_type,
+                    qubits=param_set.get('qubits', 3),
+                    shots=param_set.get('shots', 8192),
+                    drive_steps=param_set.get('drive_steps', 5),
+                    time_points=param_set.get('time_points', 100),
+                    max_time=param_set.get('max_time', 10.0),
+                    drive_param=param_set.get('drive_param', 0.9),
+                    init_state=param_set.get('init_state', 'superposition'),
+                    param_set_name=circuit_scan_name,
+                    save_results=True,
+                    show_plots=False,
+                    # Add parameter sweep tracking for single simulation
+                    sweep_session=circuit_scan_name,
+                    sweep_index=0,
+                    sweep_param1=None,
+                    sweep_value1=None,
+                    sweep_param2=None,
+                    sweep_value2=None
+                )
+                results.append(result)
             
             # Get the result path to redirect to
             result_path = result.get('result_path', '').split('/')[-1]
