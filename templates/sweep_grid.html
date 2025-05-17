@@ -118,6 +118,7 @@
                          data-lightbox="param-sweep-{{ sweep_session }}"
                          data-title="{{ circuit_type }} - {{ param1 }}: {{ sim.param1_value }}">
                         <img src="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
+                             style="width: 100%; max-width: 200px; max-height: 150px; object-fit: contain; margin: 0 auto; display: block;"
                              class="img-fluid mb-2 rounded" alt="FFT Analysis">
                       </a>
                       <div class="mt-auto">
@@ -160,6 +161,7 @@
                                data-lightbox="param-sweep-{{ sweep_session }}"
                                data-title="{{ circuit_type }} - {{ param1 }}: {{ val1 }}, {{ param2 }}: {{ val2 }}">
                               <img src="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
+                                   style="width: 100%; max-width: 100px; max-height: 80px; object-fit: contain; margin: 0 auto; display: block;"
                                    class="grid-thumbnail" alt="FFT Analysis">
                             </a>
                             <div class="mt-2">
