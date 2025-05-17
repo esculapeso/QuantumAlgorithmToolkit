@@ -1,130 +1,120 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
+
+{% block title %}Parameter Sweep Preview - {{ sweep.circuit_type }}{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+    .preview-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1rem;
+    }
+    
+    .preview-card {
+        border: 1px solid var(--bs-border-color);
+        border-radius: 0.375rem;
+        padding: 1rem;
+    }
+    
+    .preview-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+    
+    .preview-img {
+        max-width: 100%;
+        height: auto;
+    }
+    
+    .preview-params {
+        margin-bottom: 0.5rem;
+    }
+    
+    .sticky-header {
+        position: sticky;
+        top: 0;
+        background-color: var(--bs-body-bg);
+        padding: 1rem 0;
+        margin-bottom: 1rem;
+        z-index: 1000;
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <!-- Header -->
-        <div class="col-12 mb-4">
-            <div class="d-flex justify-content-between align-items-center">
-                <h3>
-                    Parameter Sweep Preview: {{ sweep.session_id }}
-                    <span class="badge bg-primary">{{ sweep.circuit_type }}</span>
-                </h3>
-                <div>
-                    <a href="{{ url_for('sweep_grid', sweep_session=sweep.session_id) }}" class="btn btn-outline-primary btn-sm">
-                        <i class="bi bi-grid-3x3-gap"></i> Grid View
-                    </a>
-                    <a href="{{ url_for('parameter_sweep') }}" class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-arrow-left"></i> Back to Parameter Sweep
-                    </a>
-                </div>
+<div class="container">
+    <div class="sticky-header">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2>Parameter Sweep Preview</h2>
+            <div>
+                <a href="{{ url_for('parameter_sweep') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to Sweeps
+                </a>
+                <a href="{{ url_for('view_sweep_grid', sweep_session=sweep.session_id) }}" class="btn btn-outline-primary">
+                    <i class="bi bi-grid-3x3-gap"></i> Grid View
+                </a>
             </div>
-            <div class="text-muted small">
-                Created: {{ sweep.created_at.strftime('%Y-%m-%d %H:%M') }} | 
-                Simulations: {{ sweep.completed_simulations }}/{{ sweep.total_simulations }}
-                {% if sweep.param1 or sweep.param2 %}
-                <div class="mt-1">
-                    Parameters: 
+        </div>
+        
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="card-title">{{ sweep.circuit_type }}</h5>
+                <div class="d-flex flex-wrap gap-2 mb-2">
                     {% if sweep.param1 %}
-                    <span class="badge bg-secondary">{{ sweep.param1 }}</span>
+                    <span class="badge bg-success">{{ sweep.param1 }}</span>
                     {% endif %}
                     {% if sweep.param2 %}
-                    <span class="badge bg-secondary">{{ sweep.param2 }}</span>
+                    <span class="badge bg-info text-dark">{{ sweep.param2 }}</span>
                     {% endif %}
                 </div>
-                {% endif %}
+                <p class="card-text">
+                    <small class="text-muted">Created: {{ sweep.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</small>
+                </p>
+                <p class="card-text">
+                    {{ sweep.completed_simulations }} of {{ sweep.total_simulations }} simulations completed
+                </p>
             </div>
         </div>
     </div>
     
-    <!-- Frequency Spectra -->
-    <div class="row">
+    <div class="preview-grid">
         {% for sim in simulations %}
-        <div class="col-md-6 col-lg-4 mb-4">
-            <div class="card h-100 shadow-sm">
-                <div class="card-header bg-light">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0">{{ sim.result_name.split('_')[-1] }}</h6>
-                        <a href="{{ url_for('view_result', result_name=sim.result_name) }}" class="btn btn-sm btn-outline-primary">
-                            View Details
-                        </a>
-                    </div>
-                </div>
-                <a href="#" class="spectrum-lightbox" data-spectrum-url="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}">
-                    <img src="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
-                         class="card-img-top" 
-                         alt="Frequency Spectrum"
-                         style="height: 200px; object-fit: contain;">
-                </a>
-                <div class="card-body">
-                    <div class="mb-2">
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <span class="text-muted">Qubits:</span> {{ sim.qubits }}
-                            </div>
-                            <div>
-                                <span class="text-muted">Drive Param:</span> {{ sim.drive_param }}
-                            </div>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <span class="text-muted">Time Points:</span> {{ sim.time_points }}
-                            </div>
-                            <div>
-                                <span class="text-muted">Drive Freq:</span> {{ "%.4f"|format(sim.drive_frequency) if sim.drive_frequency else "N/A" }}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            {% if sim.time_crystal_detected %}
-                            <span class="badge bg-success">Time Crystal</span>
-                            {% endif %}
-                            {% if sim.incommensurate_count > 0 %}
-                            <span class="badge bg-info">{{ sim.incommensurate_count }} Incommensurate</span>
-                            {% endif %}
-                        </div>
-                        <small class="text-muted">{{ sim.created_at.strftime('%H:%M:%S') }}</small>
-                    </div>
+        <div class="preview-card">
+            <div class="preview-header">
+                <h6 class="mb-0">Simulation {{ sim.sweep_index }}</h6>
+                <div>
+                    {% if sim.time_crystal_detected %}
+                    <span class="badge bg-success">Time Crystal</span>
+                    {% endif %}
+                    {% if sim.linear_combs_detected or sim.log_combs_detected %}
+                    <span class="badge bg-info text-dark">Comb</span>
+                    {% endif %}
                 </div>
             </div>
+            
+            <div class="preview-params">
+                {% if sim.sweep_param1 %}
+                <span class="badge bg-success">{{ sim.sweep_param1 }}: {{ "%.4f"|format(sim.sweep_value1) }}</span>
+                {% endif %}
+                {% if sim.sweep_param2 %}
+                <span class="badge bg-info text-dark">{{ sim.sweep_param2 }}: {{ "%.4f"|format(sim.sweep_value2) }}</span>
+                {% endif %}
+            </div>
+            
+            <a href="{{ url_for('view_result', result_name=sim.result_name) }}" class="text-decoration-none">
+                <img src="{{ url_for('get_figure', result_name=sim.result_name, figure_name='frequency_spectrum.png') }}" 
+                     alt="Frequency Spectrum" class="preview-img img-fluid">
+                
+                <div class="mt-2 text-center">
+                    <small class="text-muted">Click for details</small>
+                </div>
+            </a>
         </div>
         {% endfor %}
     </div>
 </div>
-
-<!-- Lightbox Modal -->
-<div class="modal fade" id="spectrumModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Frequency Spectrum</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body text-center">
-                <img src="" id="modalSpectrumImage" class="img-fluid" alt="Frequency Spectrum">
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Set up lightbox functionality for spectrum images
-        const spectrumLinks = document.querySelectorAll('.spectrum-lightbox');
-        const modal = new bootstrap.Modal(document.getElementById('spectrumModal'));
-        const modalImage = document.getElementById('modalSpectrumImage');
-        
-        spectrumLinks.forEach(link => {
-            link.addEventListener('click', function(e) {
-                e.preventDefault();
-                const spectrumUrl = this.getAttribute('data-spectrum-url');
-                modalImage.src = spectrumUrl;
-                modal.show();
-            });
-        });
-    });
-</script>
 {% endblock %}

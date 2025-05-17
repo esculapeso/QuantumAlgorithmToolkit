@@ -1806,6 +1806,7 @@ def run_example_parameter_scan():
 def sweep_preview(sweep_session):
     """View a minimalist preview of frequency spectra for all simulations in a parameter sweep."""
     # Get the parameter sweep record
+    from models import ParameterSweep, SimulationResult
     sweep = ParameterSweep.query.filter_by(session_id=sweep_session).first_or_404()
     
     # Get all simulations for this sweep
