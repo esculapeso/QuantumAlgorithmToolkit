@@ -183,7 +183,8 @@
                                   data-lightbox="param-sweep-{{ sweep_session }}"
                                   data-title="{{ circuit_type }} - {{ param1 }}: {{ val1 }}, {{ param2 }}: {{ val2 }}">
                                   <img src="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
-                                      class="sweep-grid-thumbnail"
+                                      class="sweep-grid-thumbnail img-fluid"
+                                      style="max-width: 100%; max-height: 120px; object-fit: contain;"
                                       alt="FFT Analysis">
                                 </a>
                                 <span class="badge {% if sim.time_crystal_detected %}bg-success{% else %}bg-secondary{% endif %} sweep-grid-badge">
