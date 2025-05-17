@@ -20,13 +20,25 @@
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="mb-3">
-                                    <label for="circuit_type" class="form-label">Circuit Type</label>
-                                    <select class="form-select" id="circuit_type" name="circuit_type" required>
+                                    <label class="form-label">Circuit Types</label>
+                                    <div class="border rounded p-3">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="select_all_circuits">
+                                            <label class="form-check-label fw-bold" for="select_all_circuits">
+                                                Select All
+                                            </label>
+                                        </div>
+                                        <hr class="my-2">
                                         {% for circuit in circuit_types %}
-                                        <option value="{{ circuit.id }}">{{ circuit.name }}</option>
+                                        <div class="form-check">
+                                            <input class="form-check-input circuit-type-checkbox" type="checkbox" name="circuit_types[]" id="circuit_{{ circuit.id }}" value="{{ circuit.id }}">
+                                            <label class="form-check-label" for="circuit_{{ circuit.id }}">
+                                                {{ circuit.name }}
+                                            </label>
+                                        </div>
                                         {% endfor %}
-                                    </select>
-                                    <div class="form-text">Select the quantum circuit algorithm to simulate.</div>
+                                    </div>
+                                    <div class="form-text">Select one or more quantum circuits to simulate.</div>
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -280,6 +292,54 @@
                 <!-- Add JavaScript for dynamic form behavior -->
                 <script>
                     document.addEventListener('DOMContentLoaded', function() {
+                        // Handle circuit type checkboxes
+                        const selectAllCircuits = document.getElementById('select_all_circuits');
+                        const circuitCheckboxes = document.querySelectorAll('.circuit-type-checkbox');
+                        const submitButton = document.querySelector('button[type="submit"]');
+                        
+                        // Set initial state - select the first circuit by default
+                        if (circuitCheckboxes.length > 0) {
+                            circuitCheckboxes[0].checked = true;
+                        }
+                        
+                        // Handle "Select All" checkbox
+                        if (selectAllCircuits) {
+                            selectAllCircuits.addEventListener('change', function() {
+                                circuitCheckboxes.forEach(checkbox => {
+                                    checkbox.checked = this.checked;
+                                });
+                            });
+                        }
+                        
+                        // Handle individual circuit checkboxes
+                        circuitCheckboxes.forEach(checkbox => {
+                            checkbox.addEventListener('change', function() {
+                                // Update "Select All" checkbox state
+                                if (selectAllCircuits) {
+                                    const allChecked = Array.from(circuitCheckboxes).every(cb => cb.checked);
+                                    selectAllCircuits.checked = allChecked;
+                                }
+                                
+                                // Check if any are selected for submit button state
+                                const anyChecked = Array.from(circuitCheckboxes).some(cb => cb.checked);
+                                if (submitButton) {
+                                    submitButton.disabled = !anyChecked;
+                                }
+                            });
+                        });
+                        
+                        // Form validation
+                        const form = document.getElementById('sweep-form');
+                        if (form) {
+                            form.addEventListener('submit', function(e) {
+                                const anyChecked = Array.from(circuitCheckboxes).some(cb => cb.checked);
+                                if (!anyChecked) {
+                                    e.preventDefault();
+                                    alert('Please select at least one circuit type');
+                                }
+                            });
+                        }
+
                         // Handle sweep toggles
                         const sweepToggles = document.querySelectorAll('.sweep-toggle');
                         sweepToggles.forEach(toggle => {
