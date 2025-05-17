@@ -1,0 +1,157 @@
+{% extends 'base.html' %}
+
+{% block title %}Parameter Sweep Matrix: {{ sweep_session_title }}{% endblock %}
+
+{% block head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='sweep_grid.css') }}">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.5.0/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/ekko-lightbox/5.3.0/ekko-lightbox.css" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <!-- Header -->
+  <div class="sweep-header">
+    <div class="d-flex justify-content-between align-items-center">
+      <h3 class="mb-0">{{ sweep_session_title }}</h3>
+      <a href="{{ url_for('dashboard') }}" class="btn btn-outline-light">
+        <i class="bi bi-arrow-left"></i> Back to Dashboard
+      </a>
+    </div>
+    <div class="sweep-badges">
+      <span class="badge bg-primary">{{ simulations[0].circuit_type if simulations else circuit_type }}</span>
+      {% if simulations %}
+      <span class="badge bg-info">{{ simulations|length }} Simulations</span>
+      {% endif %}
+      <span class="badge bg-secondary">{{ created_at }}</span>
+      
+      {% if param1 %}
+      <span class="badge bg-success">Parameter: {{ param1 }}</span>
+      {% endif %}
+      
+      {% if param2 %}
+      <span class="badge bg-warning text-dark">Parameter: {{ param2 }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if display_mode == 'pending' %}
+    <div class="pending-sweep">
+      <h4><i class="bi bi-hourglass-split"></i> Sweep In Progress</h4>
+      
+      {% if sweep_record %}
+        <div class="progress">
+          <div class="progress-bar progress-bar-striped progress-bar-animated" 
+               role="progressbar" 
+               style="width: {{ progress }}%;">
+          </div>
+        </div>
+        
+        <p class="text-light">Completed: <strong>{{ sweep_record.completed_simulations }}</strong> of {{ sweep_record.total_simulations }} 
+           simulations ({{ progress|round|int }}%)</p>
+        
+        <div class="d-flex justify-content-between">
+          <span class="text-muted"><i class="bi bi-info-circle"></i> Results will appear here when ready</span>
+          <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+          </button>
+        </div>
+      {% endif %}
+    </div>
+
+  {% elif display_mode == 'single_param' %}
+    <div class="parameter-grid">
+      {% for sim in simulations %}
+        <div class="grid-cell">
+          <div class="cell-header">
+            {{ param1 }}: {{ sim.sweep_value1 }}
+          </div>
+          <div class="cell-image">
+            <a href="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
+               data-toggle="lightbox" data-gallery="sweep-gallery" 
+               data-title="{{ param1 }}: {{ sim.sweep_value1 }}">
+              <img src="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
+                   alt="FFT Analysis">
+            </a>
+          </div>
+          <div class="cell-footer">
+            <div class="d-flex justify-content-between">
+              <span class="badge {% if sim.time_crystal_detected %}bg-success{% else %}bg-secondary{% endif %}">
+                {{ 'Crystal Detected' if sim.time_crystal_detected else 'No Crystal' }}
+              </span>
+              <a href="{{ url_for('view_result', result_name=sim.result_name) }}" 
+                 class="btn btn-sm btn-primary">Details</a>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+  {% elif display_mode == 'two_params' %}
+    <div class="matrix-grid">
+      <table class="matrix-table">
+        <thead>
+          <tr>
+            <th scope="col">{{ param1 }} / {{ param2 }}</th>
+            {% for val2 in param2_values %}
+              <th scope="col">{{ val2 }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for val1 in param1_values %}
+            <tr>
+              <th scope="row">{{ val1 }}</th>
+              {% for val2 in param2_values %}
+                {% set sim = grid_lookup.get((val1, val2)) %}
+                <td>
+                  {% if sim %}
+                    <div class="matrix-cell">
+                      <div class="matrix-cell-image">
+                        <a href="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
+                           data-toggle="lightbox" data-gallery="sweep-matrix"
+                           data-title="{{ param1 }}: {{ val1 }}, {{ param2 }}: {{ val2 }}">
+                          <img src="{{ url_for('get_figure', result_name=sim.result_name, figure_name='fft_analysis.png') }}" 
+                               alt="FFT Analysis">
+                        </a>
+                      </div>
+                      <div class="matrix-cell-footer">
+                        <span class="badge {% if sim.time_crystal_detected %}bg-success{% else %}bg-secondary{% endif %}">
+                          {{ 'TC ✓' if sim.time_crystal_detected else 'No TC' }}
+                        </span>
+                        <a href="{{ url_for('view_result', result_name=sim.result_name) }}" 
+                           class="btn btn-primary btn-xs">Details</a>
+                      </div>
+                    </div>
+                  {% else %}
+                    <div class="no-data-cell">
+                      <span>No data</span>
+                    </div>
+                  {% endif %}
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="alert alert-secondary">
+      <p>No parameter sweep data available.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ekko-lightbox/5.3.0/ekko-lightbox.min.js"></script>
+<script>
+  $(document).on('click', '[data-toggle="lightbox"]', function(event) {
+    event.preventDefault();
+    $(this).ekkoLightbox({
+      alwaysShowClose: true,
+      showArrows: true
+    });
+  });
+</script>
+{% endblock %}
