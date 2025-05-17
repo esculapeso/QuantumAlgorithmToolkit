@@ -437,7 +437,7 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
         sweep_session_id = scan_name
         
         # Create the parameter sweep record in the database
-        with app.app_context():
+        try:
             from models import ParameterSweep
             # Check if the sweep already exists
             existing_sweep = ParameterSweep.query.filter_by(session_id=sweep_session_id).first()
@@ -453,6 +453,18 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
                 db.session.add(new_sweep)
                 db.session.commit()
                 print(f"Created parameter sweep record: {sweep_session_id} with {total_sets} simulations")
+            else:
+                # Update existing sweep record
+                existing_sweep.total_simulations = max(existing_sweep.total_simulations, total_sets)
+                existing_sweep.circuit_type = circuit_type
+                existing_sweep.param1 = param1_name or existing_sweep.param1
+                existing_sweep.param2 = param2_name or existing_sweep.param2
+                db.session.commit()
+                print(f"Updated parameter sweep record: {sweep_session_id}")
+        except Exception as e:
+            print(f"Error creating parameter sweep record: {str(e)}")
+            import traceback
+            traceback.print_exc()
         
         # Run each simulation independently
         for i, param_set in enumerate(parameter_sets):
