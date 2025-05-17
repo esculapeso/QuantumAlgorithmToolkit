@@ -440,7 +440,7 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
             print(f"Error: No circuit type provided for sequential simulations")
             return
             
-        # Count of total parameter sets
+        # Count of total parameter sets (outside app context is fine)
         total_sets = len(parameter_sets)
         print(f"Starting sequential simulation run with {total_sets} parameter combinations")
         
@@ -470,38 +470,39 @@ def run_sequential_simulations(circuit_type, parameter_sets, scan_name):
         
         print(f"Sweep parameters: {', '.join([p[0] for p in swept_params])}")
         
-        # Create a parameter sweep record in the database
+        # Create a parameter sweep record in the database - all database operations must be inside app_context
         sweep_session_id = scan_name
         
-        # Create the parameter sweep record in the database
-        try:
-            from models import ParameterSweep
-            # Check if the sweep already exists
-            existing_sweep = ParameterSweep.query.filter_by(session_id=sweep_session_id).first()
-            if not existing_sweep:
-                # Create new sweep record
-                new_sweep = ParameterSweep()
-                new_sweep.session_id = sweep_session_id
-                new_sweep.circuit_type = circuit_type
-                new_sweep.param1 = param1_name
-                new_sweep.param2 = param2_name
-                new_sweep.total_simulations = total_sets
-                new_sweep.completed_simulations = 0
-                db.session.add(new_sweep)
-                db.session.commit()
-                print(f"Created parameter sweep record: {sweep_session_id} with {total_sets} simulations")
-            else:
-                # Update existing sweep record
-                existing_sweep.total_simulations = max(existing_sweep.total_simulations, total_sets)
-                existing_sweep.circuit_type = circuit_type
-                existing_sweep.param1 = param1_name or existing_sweep.param1
-                existing_sweep.param2 = param2_name or existing_sweep.param2
-                db.session.commit()
-                print(f"Updated parameter sweep record: {sweep_session_id}")
-        except Exception as e:
-            print(f"Error creating parameter sweep record: {str(e)}")
-            import traceback
-            traceback.print_exc()
+        # Use app context for all database operations
+        with app.app_context():
+            try:
+                from models import ParameterSweep
+                # Check if the sweep already exists
+                existing_sweep = ParameterSweep.query.filter_by(session_id=sweep_session_id).first()
+                if not existing_sweep:
+                    # Create new sweep record
+                    new_sweep = ParameterSweep()
+                    new_sweep.session_id = sweep_session_id
+                    new_sweep.circuit_type = circuit_type
+                    new_sweep.param1 = param1_name
+                    new_sweep.param2 = param2_name
+                    new_sweep.total_simulations = total_sets
+                    new_sweep.completed_simulations = 0
+                    db.session.add(new_sweep)
+                    db.session.commit()
+                    print(f"Created parameter sweep record: {sweep_session_id} with {total_sets} simulations")
+                else:
+                    # Update existing sweep record
+                    existing_sweep.total_simulations = max(existing_sweep.total_simulations, total_sets)
+                    existing_sweep.circuit_type = circuit_type
+                    existing_sweep.param1 = param1_name or existing_sweep.param1
+                    existing_sweep.param2 = param2_name or existing_sweep.param2
+                    db.session.commit()
+                    print(f"Updated parameter sweep record: {sweep_session_id}")
+            except Exception as e:
+                print(f"Error creating parameter sweep record: {str(e)}")
+                import traceback
+                traceback.print_exc()
         
         # Run each simulation independently
         for i, param_set in enumerate(parameter_sets):

@@ -374,6 +374,7 @@
                             let totalCombinations = 1;
                             const params = ['qubits', 'shots', 'drive_steps', 'drive_param', 'time_points', 'max_time'];
                             
+                            // Count parameters being swept
                             params.forEach(param => {
                                 const sweepEnabled = document.getElementById('sweep_' + param).checked;
                                 
@@ -383,15 +384,22 @@
                                 }
                             });
                             
+                            // Count selected circuit types 
+                            const circuitCheckboxes = document.querySelectorAll('.circuit-type-checkbox:checked');
+                            const selectedCircuitCount = circuitCheckboxes.length || 1;
+                            
+                            // Total simulations = parameter combinations × circuit types
+                            const totalSimulations = totalCombinations * selectedCircuitCount;
+                            
                             // Update the UI
                             const countElement = document.getElementById('combination-count');
                             const warningElement = document.getElementById('combination-warning');
                             
-                            countElement.textContent = `Total parameter combinations: ${totalCombinations}`;
+                            countElement.textContent = `Total simulations: ${totalSimulations} (${selectedCircuitCount} circuit${selectedCircuitCount > 1 ? 's' : ''} × ${totalCombinations} parameter combinations)`;
                             
-                            if (totalCombinations > 50) {
+                            if (totalSimulations > 50) {
                                 warningElement.classList.remove('d-none');
-                                warningElement.textContent = `Warning: ${totalCombinations} combinations will take a significant amount of processing time. Consider reducing the number of combinations.`;
+                                warningElement.textContent = `Warning: ${totalSimulations} simulations will take a significant amount of processing time. Consider reducing the number of circuits or parameter combinations.`;
                             } else if (totalCombinations > 20) {
                                 warningElement.classList.remove('d-none');
                                 warningElement.textContent = `Note: ${totalCombinations} combinations may take several minutes to complete.`;
